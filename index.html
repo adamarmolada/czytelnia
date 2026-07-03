@@ -12,18 +12,16 @@
 <script>
 (function(){
   function esc(c){return {"<":"&lt;",">":"&gt;","&":"&amp;"}[c];}
-  function show(msg){
-    var r=document.getElementById("root");
-    if(r) r.innerHTML='<div style="font-family:Arial,sans-serif;color:#0B0B0A;padding:20px 22px;white-space:pre-wrap;line-height:1.55;font-size:14px"><b>Aplikacja nie wystartowa\u0142a.</b>\n\nSzczeg\u00f3\u0142y (przydatne do naprawy):\n\n'+String(msg).replace(/[<>&]/g,esc)+'</div>';
-  }
-  window.addEventListener("error",function(e){ show((e.message||"b\u0142\u0105d")+(e.filename?("\n"+e.filename+":"+e.lineno+":"+e.colno):"")); });
-  window.addEventListener("unhandledrejection",function(e){ var r=(e&&e.reason)||{}; show("Promise: "+(r.message||r)); });
+  window.__show=function(msg){ var r=document.getElementById("root"); if(r) r.innerHTML='<div style="font-family:Arial,sans-serif;color:#0B0B0A;padding:20px 22px;white-space:pre-wrap;line-height:1.55;font-size:14px"><b>Aplikacja nie wystartowa\u0142a.</b>\n\n'+String(msg).replace(/[<>&]/g,esc)+'</div>'; };
+  window.__lib=function(name){ window.__show("Nie uda\u0142o si\u0119 wczyta\u0107 biblioteki: "+name+".\n\nTa aplikacja potrzebuje internetu i NIE dzia\u0142a w podgl\u0105dzie Claude \u2014 otw\u00f3rz j\u0105 pod adresem github.io w przegl\u0105darce."); };
+  window.addEventListener("error",function(e){ var m=e.message||"b\u0142\u0105d"; if(m==="Script error."){ m="Script error. \u2014 zwykle znaczy, \u017ce zewn\u0119trzny skrypt zosta\u0142 zablokowany (np. podgl\u0105d Claude). Otw\u00f3rz aplikacj\u0119 pod adresem github.io."; } window.__show(m+(e.filename?("\n"+e.filename+":"+e.lineno):"")); });
+  window.addEventListener("unhandledrejection",function(e){ var r=(e&&e.reason)||{}; window.__show("Promise: "+(r.message||r)); });
 })();
 </script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" crossorigin></script>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js" crossorigin onerror="window.__lib&&window.__lib('Firebase')"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js" crossorigin onerror="window.__lib&&window.__lib('Firebase Firestore')"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin onerror="window.__lib&&window.__lib('React')"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin onerror="window.__lib&&window.__lib('React DOM')"></script>
 </head>
 <body>
 <div id="root"><div id="boot">czytelnia…</div></div>
@@ -31,69 +29,55 @@
 "use strict";
 const { useState, useEffect, useRef, useCallback } = React;
 const C = {
-    paper: "#F2F6E6",
-    paperDeep: "#E9F0D6",
-    ink: "#0B0B0A",
-    inkSoft: "#56604A",
-    shelf: "#8ACE00",
-    shelfSoft: "#7BB900",
-    shelfText: "#0B0B0A",
-    shelfMute: "#33420C",
-    lime: "#8ACE00",
-    limeDeep: "#6FA800",
-    olive: "#3E5400",
-    line: "#D2DEB6",
-    danger: "#C2381F",
+    paper: "#F2F6E6", paperDeep: "#E9F0D6", ink: "#0B0B0A", inkSoft: "#56604A",
+    shelf: "#8ACE00", shelfSoft: "#7BB900", shelfText: "#0B0B0A", shelfMute: "#33420C",
+    lime: "#8ACE00", limeDeep: "#6FA800", olive: "#3E5400", line: "#D2DEB6", danger: "#C2381F",
 };
-const CSS = `
+const LEX_CSS = `
 *{box-sizing:border-box;}
 .lex-root{font-family:Arial,Helvetica,"Helvetica Neue",sans-serif;color:${C.ink};-webkit-font-smoothing:antialiased;}
-.lex-scroll::-webkit-scrollbar{width:10px;}
-.lex-scroll::-webkit-scrollbar-thumb{background:${C.line};border-radius:8px;border:3px solid ${C.paper};}
+.lex-scroll::-webkit-scrollbar{width:10px;} .lex-scroll::-webkit-scrollbar-thumb{background:${C.line};border-radius:8px;border:3px solid ${C.paper};}
 .lex-scroll{scrollbar-width:thin;scrollbar-color:${C.line} transparent;}
-.lex-shelf-scroll::-webkit-scrollbar{width:8px;}
-.lex-shelf-scroll::-webkit-scrollbar-thumb{background:${C.shelfSoft};border-radius:8px;}
-.lex-in::placeholder{color:${C.inkSoft};opacity:.6;}
-.lex-in:focus{outline:none;border-color:${C.lime};box-shadow:0 0 0 3px rgba(138,206,0,.35);}
-.lex-book-btn{transition:background .12s ease;}
-.lex-book-btn:hover{background:${C.shelfSoft};}
-.lex-icon-btn{transition:opacity .12s ease,background .12s ease;cursor:pointer;}
-.lex-icon-btn:hover{opacity:1;}
-.lex-primary{transition:transform .08s ease,opacity .12s ease;}
-.lex-primary:hover{opacity:.9;}
-.lex-primary:active{transform:translateY(1px);}
-.lex-primary:disabled{opacity:.4;cursor:not-allowed;}
-.lex-composer{border:1.5px solid ${C.ink};background:#fff;border-radius:18px;transition:border-color .15s ease,box-shadow .15s ease;}
-.lex-composer:focus-within{border-color:${C.lime};box-shadow:0 0 0 4px rgba(138,206,0,.3);}
-.lex-bare{border:none;outline:none;background:transparent;width:100%;font-family:inherit;color:${C.ink};}
-.lex-bare::placeholder{color:${C.inkSoft};opacity:.6;}
-.lex-send{transition:transform .08s ease,opacity .12s ease;}
-.lex-send:hover{opacity:.9;}
-.lex-send:active{transform:translateY(1px) scale(.98);}
-.lex-send:disabled{opacity:.35;cursor:not-allowed;}
-.lex-chip{color:${C.inkSoft};font-weight:700;font-size:11px;letter-spacing:.14em;}
-.lex-spk{transition:opacity .12s ease,transform .08s ease;}
-.lex-spk:hover{opacity:.9;}
-.lex-spk:active{transform:scale(.94);}
-.lex-spk.playing{animation:lexPulse .6s ease-in-out infinite;}
-@keyframes lexPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.13);}}
-.lex-entry{animation:lexIn .32s cubic-bezier(.2,.7,.3,1);}
-@keyframes lexIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
+.lex-shelf-scroll::-webkit-scrollbar{width:8px;} .lex-shelf-scroll::-webkit-scrollbar-thumb{background:${C.shelfSoft};border-radius:8px;}
+.lex-field{width:100%;background:#F6F8EE;border:1px solid ${C.line};border-radius:12px;color:${C.ink};font-family:inherit;outline:none;transition:border-color .15s ease,box-shadow .15s ease;}
+.lex-field:focus{border-color:${C.lime};box-shadow:0 0 0 3px rgba(138,206,0,.3);}
+.lex-field::placeholder{color:${C.inkSoft};opacity:.6;}
+.lex-icon-btn{transition:opacity .12s ease;cursor:pointer;} .lex-icon-btn:hover{opacity:1;}
+.lex-send{transition:transform .08s ease,opacity .12s ease;} .lex-send:hover{opacity:.9;} .lex-send:active{transform:translateY(1px) scale(.98);} .lex-send:disabled{opacity:.35;cursor:not-allowed;}
+.lex-entry{animation:lexIn .32s cubic-bezier(.2,.7,.3,1);} @keyframes lexIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:none;}}
 .lex-mark{background:${C.lime};color:${C.ink};border-radius:2px;padding:0 3px;font-weight:700;}
-.lex-dots span{animation:lexBlink 1.2s infinite both;}
-.lex-dots span:nth-child(2){animation-delay:.2s;}
-.lex-dots span:nth-child(3){animation-delay:.4s;}
+.lex-dots span{animation:lexBlink 1.2s infinite both;} .lex-dots span:nth-child(2){animation-delay:.2s;} .lex-dots span:nth-child(3){animation-delay:.4s;}
 @keyframes lexBlink{0%,80%,100%{opacity:.25;}40%{opacity:1;}}
-.lex-aside{position:relative;transform:none;transition:transform .25s ease;}
-.lex-overlay{display:none;}
-.lex-menu{display:none;}
-@media (max-width:767px){
-  .lex-aside{position:fixed;top:0;left:0;height:100%;transform:translateX(-100%);box-shadow:2px 0 24px #0004;}
-  .lex-aside.open{transform:translateX(0);}
-  .lex-overlay{display:block;}
-  .lex-menu{display:inline-flex;}
-}
-@media (prefers-reduced-motion: reduce){.lex-entry,.lex-dots span,.lex-aside{animation:none;transition:none;}}
+.lex-spk{transition:opacity .12s ease,transform .08s ease;} .lex-spk:hover{opacity:.9;} .lex-spk:active{transform:scale(.94);} .lex-spk.playing{animation:lexPulse .6s ease-in-out infinite;}
+@keyframes lexPulse{0%,100%{transform:scale(1);}50%{transform:scale(1.13);}}
+.lex-aside{position:relative;transform:none;transition:transform .25s ease;} .lex-overlay{display:none;} .lex-menu{display:none;}
+@media (max-width:767px){ .lex-aside{position:fixed;top:0;left:0;height:100%;transform:translateX(-100%);box-shadow:2px 0 24px #0004;} .lex-aside.open{transform:translateX(0);} .lex-overlay{display:block;} .lex-menu{display:inline-flex;} }
+.lex-book{position:relative;border-radius:2px 4px 4px 2px;box-shadow:1px 2px 6px rgba(11,11,10,.28);background-size:cover;background-position:center;cursor:pointer;transition:transform .14s ease,box-shadow .14s ease;overflow:hidden;}
+.lex-book::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(to right,rgba(0,0,0,.4),rgba(0,0,0,0));}
+.lex-book::after{content:"";position:absolute;right:0;top:0;bottom:0;width:2px;background:rgba(255,255,255,.55);}
+.lex-book:hover{transform:translateY(-3px) rotate(-1deg);box-shadow:3px 6px 12px rgba(11,11,10,.3);}
+.lex-book.sel{box-shadow:0 0 0 3px ${C.lime},2px 4px 10px rgba(11,11,10,.3);}
+.lex-book-title{position:absolute;inset:0;padding:8px 8px 8px 11px;color:#fff;font-size:11px;font-weight:800;line-height:1.22;overflow:hidden;text-shadow:0 1px 3px rgba(0,0,0,.6);background:linear-gradient(160deg,rgba(0,0,0,.15),rgba(0,0,0,.45));}
+.lex-book-x{position:absolute;top:-7px;right:-7px;width:22px;height:22px;border-radius:50%;border:2px solid ${C.shelf};background:${C.ink};color:#fff;font-size:13px;line-height:1;cursor:pointer;align-items:center;justify-content:center;}
+.lex-addtile{border:2px dashed ${C.ink};background:transparent;color:${C.ink};border-radius:4px;cursor:pointer;font-size:26px;font-weight:800;display:flex;align-items:center;justify-content:center;transition:background .12s ease;}
+.lex-addtile:hover{background:rgba(0,0,0,.06);}
+.lex-modal-bg{position:fixed;inset:0;background:#0009;z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;}
+.lex-modal{background:${C.paper};border-radius:18px;width:100%;max-width:440px;padding:20px;box-shadow:0 20px 60px #0007;}
+.lex-modal-title{font-size:22px;font-weight:900;letter-spacing:-.03em;margin-bottom:14px;}
+.lex-sug{border:1px solid ${C.line};border-radius:12px;overflow:hidden;margin-top:6px;background:#fff;}
+.lex-sug-item{display:flex;gap:10px;align-items:center;padding:9px 10px;cursor:pointer;border-bottom:1px solid ${C.line};}
+.lex-sug-item:last-child{border-bottom:none;} .lex-sug-item:hover{background:#F0F4E2;}
+.lex-cover-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px;}
+.lex-cover-opt{aspect-ratio:2/3;border-radius:4px;background-size:cover;background-position:center;background-color:#ddd;cursor:pointer;border:3px solid transparent;box-shadow:1px 2px 5px rgba(0,0,0,.2);}
+.lex-cover-opt.none{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:${C.inkSoft};background:#F0F4E2;}
+.lex-cover-opt.sel{border-color:${C.lime};}
+.lex-fc{position:fixed;inset:0;z-index:70;background:${C.paper};display:flex;flex-direction:column;}
+.lex-card{perspective:1400px;cursor:pointer;} .lex-card-inner{position:relative;width:100%;height:100%;transition:transform .5s;transform-style:preserve-3d;}
+.lex-card-inner.flipped{transform:rotateY(180deg);}
+.lex-face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;background:#fff;border:1px solid ${C.line};border-radius:20px;box-shadow:0 12px 30px rgba(11,11,10,.14);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:26px;text-align:center;}
+.lex-face.back{transform:rotateY(180deg);background:#FBFDF4;}
+.lex-primary{transition:transform .08s ease,opacity .12s ease;} .lex-primary:hover{opacity:.9;} .lex-primary:active{transform:translateY(1px);} .lex-primary:disabled{opacity:.4;cursor:not-allowed;}
+@media (prefers-reduced-motion: reduce){.lex-entry,.lex-dots span,.lex-aside,.lex-card-inner{animation:none;transition:none;}}
 `;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const FIREBASE_CONFIG = {
@@ -137,12 +121,11 @@ function cloudDoc() {
         return null;
     }
 }
+function decodeHtml(s) { return s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"); }
 async function viaMyMemory(text) {
-    const url = "https://api.mymemory.translated.net/get?q=" +
-        encodeURIComponent(text) + "&langpair=en|pl";
-    const r = await fetch(url);
+    const r = await fetch("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text) + "&langpair=en|pl");
     if (!r.ok)
-        throw new Error("mymemory http " + r.status);
+        throw new Error("mymemory");
     const d = await r.json();
     const t = d && d.responseData && d.responseData.translatedText;
     if (!t || /MYMEMORY WARNING|INVALID|PLEASE SELECT/i.test(t))
@@ -150,15 +133,13 @@ async function viaMyMemory(text) {
     return decodeHtml(t.trim());
 }
 async function viaGoogle(text) {
-    const url = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pl&dt=t&q=" +
-        encodeURIComponent(text);
-    const r = await fetch(url);
+    const r = await fetch("https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pl&dt=t&q=" + encodeURIComponent(text));
     if (!r.ok)
-        throw new Error("google http " + r.status);
+        throw new Error("google");
     const d = await r.json();
     if (!Array.isArray(d) || !Array.isArray(d[0]))
         throw new Error("google shape");
-    return d[0].map((seg) => (seg && seg[0]) || "").join("").trim();
+    return d[0].map(s => (s && s[0]) || "").join("").trim();
 }
 async function translate(text) {
     if (!text || !text.trim())
@@ -166,37 +147,23 @@ async function translate(text) {
     try {
         return await viaMyMemory(text);
     }
-    catch (e1) {
-        try {
-            return await viaGoogle(text);
-        }
-        catch (e2) {
-            throw new Error("translate-failed");
-        }
+    catch (e) {
+        return await viaGoogle(text);
     }
 }
-function decodeHtml(s) {
-    return s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&")
-        .replace(/&lt;/g, "<").replace(/&gt;/g, ">");
-}
-const POS_PL = {
-    noun: "rzeczownik", verb: "czasownik", adjective: "przymiotnik", adverb: "przysłówek",
-    pronoun: "zaimek", preposition: "przyimek", conjunction: "spójnik", interjection: "wykrzyknik",
-    exclamation: "wykrzyknik", determiner: "określnik", article: "przedimek", numeral: "liczebnik",
-};
+const POS_PL = { noun: "rzeczownik", verb: "czasownik", adjective: "przymiotnik", adverb: "przysłówek", pronoun: "zaimek", preposition: "przyimek", conjunction: "spójnik", interjection: "wykrzyknik", exclamation: "wykrzyknik", determiner: "określnik", article: "przedimek", numeral: "liczebnik" };
 async function fetchDict(word) {
     try {
-        const r = await fetch("https://api.dictionaryapi.dev/api/v2/entries/en/" +
-            encodeURIComponent(word.toLowerCase().trim()));
+        const r = await fetch("https://api.dictionaryapi.dev/api/v2/entries/en/" + encodeURIComponent(word.toLowerCase().trim()));
         if (!r.ok)
-            return {};
+            return { missing: r.status === 404 };
         const d = await r.json();
         const entry = Array.isArray(d) ? d[0] : null;
         if (!entry)
             return {};
         let ipa = entry.phonetic || "";
         if (!ipa && Array.isArray(entry.phonetics)) {
-            const p = entry.phonetics.find((x) => x && x.text);
+            const p = entry.phonetics.find(x => x && x.text);
             if (p)
                 ipa = p.text;
         }
@@ -214,10 +181,10 @@ async function fetchDict(word) {
         }
         let audio = "";
         if (Array.isArray(entry.phonetics)) {
-            const withAudio = entry.phonetics.filter((p) => p && p.audio);
-            const us = withAudio.find((p) => /-us\.mp3$/i.test(p.audio));
-            const uk = withAudio.find((p) => /-uk\.mp3$/i.test(p.audio));
-            audio = (us || uk || withAudio[0] || {}).audio || "";
+            const wa = entry.phonetics.filter(p => p && p.audio);
+            const us = wa.find(p => /-us\.mp3$/i.test(p.audio));
+            const uk = wa.find(p => /-uk\.mp3$/i.test(p.audio));
+            audio = (us || uk || wa[0] || {}).audio || "";
         }
         return { ipa, pos, example, audio };
     }
@@ -239,68 +206,124 @@ async function lookupWord({ word, sentence }) {
             sentencePl = "";
         }
     }
-    return {
-        id: uid(),
-        word: clean,
-        queried: clean,
-        ipa: dict.ipa || "",
-        pos: dict.pos ? (POS_PL[dict.pos] || dict.pos) : "",
-        pl: pl,
-        note: "",
-        sentence: src,
-        sentencePl,
-        audio: dict.audio || "",
-        fromBook: !!hasSentence,
-        createdAt: Date.now(),
-    };
+    return { id: uid(), word: clean, queried: clean, ipa: dict.ipa || "", pos: dict.pos ? (POS_PL[dict.pos] || dict.pos) : "", pl: pl, note: "", sentence: src, sentencePl, audio: dict.audio || "", fromBook: !!hasSentence, createdAt: Date.now() };
 }
-function googleTtsUrl(word) {
-    return "https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=" +
-        encodeURIComponent(word);
-}
-function speakBrowser(word, done) {
+async function olSearch(q) {
     try {
-        const synth = window.speechSynthesis;
-        if (!synth) {
-            done && done();
-            return;
-        }
-        synth.cancel();
-        const u = new SpeechSynthesisUtterance(word);
-        u.lang = "en-US";
-        const voices = synth.getVoices() || [];
-        const v = voices.find((x) => /^en[-_]/i.test(x.lang)) || voices.find((x) => /en/i.test(x.lang));
-        if (v)
-            u.voice = v;
-        u.onend = () => done && done();
-        u.onerror = () => done && done();
-        synth.speak(u);
+        const r = await fetch("https://openlibrary.org/search.json?limit=6&fields=title,author_name,cover_i,key&title=" + encodeURIComponent(q));
+        if (!r.ok)
+            return [];
+        const d = await r.json();
+        return (d.docs || []).map(doc => ({ title: doc.title, author: (doc.author_name && doc.author_name[0]) || "", coverId: doc.cover_i || null, workKey: doc.key || "" })).filter(x => x.title).slice(0, 6);
     }
     catch {
-        done && done();
+        return [];
     }
 }
-function playPronunciation(entry, done) {
-    const sources = [];
-    if (entry.audio)
-        sources.push(entry.audio);
-    sources.push(googleTtsUrl(entry.word));
-    let i = 0;
-    const tryNext = () => {
-        if (i >= sources.length) {
-            speakBrowser(entry.word, done);
+async function olCovers(workKey) {
+    try {
+        if (!workKey)
+            return [];
+        const r = await fetch("https://openlibrary.org" + workKey + "/editions.json?limit=40");
+        if (!r.ok)
+            return [];
+        const d = await r.json();
+        const ids = [];
+        for (const e of d.entries || []) {
+            if (Array.isArray(e.covers))
+                for (const c of e.covers) {
+                    if (c > 0 && ids.indexOf(c) < 0)
+                        ids.push(c);
+                }
+        }
+        return ids.slice(0, 11).map(id => ({ id, url: "https://covers.openlibrary.org/b/id/" + id + "-M.jpg" }));
+    }
+    catch {
+        return [];
+    }
+}
+async function suggestWord(w) {
+    try {
+        const r = await fetch("https://api.datamuse.com/sug?max=6&s=" + encodeURIComponent(w));
+        if (!r.ok)
+            return [];
+        const d = await r.json();
+        return (d || []).map(x => x.word).filter(Boolean);
+    }
+    catch {
+        return [];
+    }
+}
+let _voices = [];
+function loadVoices() { try {
+    _voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+}
+catch { } }
+if (typeof window !== "undefined" && window.speechSynthesis) {
+    loadVoices();
+    try {
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    catch { }
+}
+let _unlocked = false;
+function unlockSpeech() { if (_unlocked || !window.speechSynthesis)
+    return; _unlocked = true; try {
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    window.speechSynthesis.speak(u);
+}
+catch { } }
+if (typeof window !== "undefined") {
+    window.addEventListener("pointerdown", unlockSpeech, { once: true });
+}
+function speakBrowser(word) {
+    try {
+        const synth = window.speechSynthesis;
+        if (!synth)
+            return false;
+        synth.cancel();
+        if (!_voices.length)
+            loadVoices();
+        const u = new SpeechSynthesisUtterance(word);
+        u.lang = "en-US";
+        u.rate = .95;
+        const v = _voices.find(x => /^en[-_]/i.test(x.lang)) || _voices.find(x => /en/i.test(x.lang));
+        if (v)
+            u.voice = v;
+        synth.speak(u);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+function playPronunciation(entry, setSt) {
+    setSt && setSt("playing");
+    const done = () => setSt && setSt("idle");
+    if (entry.audio) {
+        try {
+            const a = new Audio(entry.audio);
+            a.onended = done;
+            a.onerror = () => { speakBrowser(entry.word); done(); };
+            const p = a.play();
+            if (p && p.catch)
+                p.catch(() => { speakBrowser(entry.word); done(); });
             return;
         }
-        const a = new Audio(sources[i++]);
-        a.onended = () => done && done();
-        a.onerror = () => tryNext();
-        const p = a.play();
-        if (p && p.catch)
-            p.catch(() => tryNext());
-    };
-    tryNext();
+        catch { }
+    }
+    speakBrowser(entry.word);
+    setTimeout(done, 1100);
 }
-function Highlight({ text, word }) {
+function bookColor(s) {
+    const pal = ["#1F6F6B", "#B8791B", "#3E5400", "#26333E", "#6FA800", "#7B2D26", "#2B3A55", "#0B0B0A"];
+    let h = 0;
+    for (let i = 0; i < s.length; i++)
+        h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return pal[h % pal.length];
+}
+function MarkWord({ text, word }) {
     if (!text)
         return null;
     const w = (word || "").trim();
@@ -308,46 +331,157 @@ function Highlight({ text, word }) {
         return React.createElement(React.Fragment, null, text);
     try {
         const esc = w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const re = new RegExp(`(${esc}\\w*)`, "ig");
+        const re = new RegExp("(" + esc + "\\w*)", "ig");
         const parts = text.split(re);
         const lw = w.toLowerCase();
-        return (React.createElement(React.Fragment, null, parts.map((p, i) => p && p.toLowerCase().startsWith(lw)
-            ? React.createElement("span", { key: i, className: "lex-mark" }, p)
-            : React.createElement("span", { key: i }, p))));
+        return (React.createElement(React.Fragment, null, parts.map((p, i) => p && p.toLowerCase().startsWith(lw) ? React.createElement("span", { key: i, className: "lex-mark" }, p) : React.createElement("span", { key: i }, p))));
     }
     catch {
         return React.createElement(React.Fragment, null, text);
     }
 }
+function SpeakerBtn({ entry, size }) {
+    const [st, setSt] = useState("idle");
+    const s = size || 36;
+    return (React.createElement("button", { onClick: (e) => { e.stopPropagation(); playPronunciation(entry, setSt); }, "aria-label": "pos\u0142uchaj wymowy", title: "pos\u0142uchaj wymowy", className: "lex-spk" + (st === "playing" ? " playing" : ""), style: { width: s, height: s, flexShrink: 0, border: "none", borderRadius: s * 0.28, background: C.lime, color: C.ink, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } },
+        React.createElement("svg", { width: Math.round(s * 0.47), height: Math.round(s * 0.47), viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round" },
+            React.createElement("path", { d: "M3 9v6h4l5 4V5L7 9H3z" }),
+            React.createElement("path", { d: "M16.5 8.5a5 5 0 0 1 0 7" }),
+            React.createElement("path", { d: "M19.5 6a8 8 0 0 1 0 12" }))));
+}
 function Entry({ e, onDelete }) {
-    const [playing, setPlaying] = useState(false);
-    const speak = () => {
-        if (playing)
-            return;
-        setPlaying(true);
-        playPronunciation(e, () => setPlaying(false));
-    };
     return (React.createElement("article", { className: "lex-entry", style: { padding: "22px 2px", borderBottom: `1px solid ${C.line}` } },
         React.createElement("div", { style: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 } },
             React.createElement("h3", { style: { margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: "-.02em" } }, e.word),
             e.ipa && React.createElement("span", { style: { fontSize: 13.5, color: C.inkSoft } }, e.ipa),
             e.pos && React.createElement("span", { style: { fontSize: 14, color: C.olive, fontWeight: 700 } }, e.pos.toLowerCase()),
             React.createElement("div", { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 } },
-                React.createElement("button", { onClick: speak, "aria-label": "pos\u0142uchaj wymowy", title: "pos\u0142uchaj wymowy", className: "lex-spk" + (playing ? " playing" : ""), style: { width: 36, height: 36, flexShrink: 0, border: "none", borderRadius: 10, background: C.lime, color: C.ink, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } },
-                    React.createElement("svg", { width: "17", height: "17", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round" },
-                        React.createElement("path", { d: "M3 9v6h4l5 4V5L7 9H3z" }),
-                        React.createElement("path", { d: "M16.5 8.5a5 5 0 0 1 0 7" }),
-                        React.createElement("path", { d: "M19.5 6a8 8 0 0 1 0 12" }))),
+                React.createElement(SpeakerBtn, { entry: e }),
                 React.createElement("button", { onClick: () => onDelete(e.id), "aria-label": "usu\u0144 has\u0142o", className: "lex-icon-btn", style: { border: "none", background: "transparent", color: C.inkSoft, opacity: .45, fontSize: 13, padding: 4, cursor: "pointer" } }, "usu\u0144"))),
         React.createElement("p", { style: { margin: "6px 0 0", fontSize: 21, fontWeight: 500, color: C.ink } }, e.pl),
         e.note && React.createElement("p", { style: { margin: "4px 0 0", fontSize: 13.5, color: C.inkSoft, lineHeight: 1.5 } }, e.note),
         e.sentence && (React.createElement("div", { style: { marginTop: 14, borderLeft: `3px solid ${C.lime}`, paddingLeft: 14 } },
             React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } },
                 React.createElement("span", { style: { width: 7, height: 7, borderRadius: 7, background: e.fromBook ? C.lime : "#A7B190" } }),
-                React.createElement("span", { style: { fontSize: 11, letterSpacing: ".08em", textTransform: "lowercase", color: C.inkSoft, fontWeight: 700 } }, e.fromBook ? "z książki" : "przykład")),
+                React.createElement("span", { style: { fontSize: 11, letterSpacing: ".08em", color: C.inkSoft, fontWeight: 700 } }, e.fromBook ? "z książki" : "przykład")),
             React.createElement("p", { style: { margin: 0, fontStyle: "italic", fontSize: 16.5, lineHeight: 1.55, color: C.ink } },
-                React.createElement(Highlight, { text: e.sentence, word: e.queried })),
+                React.createElement(MarkWord, { text: e.sentence, word: e.queried })),
             e.sentencePl && React.createElement("p", { style: { margin: "6px 0 0", fontSize: 14.5, lineHeight: 1.55, color: C.inkSoft } }, e.sentencePl)))));
+}
+function BookThumb({ book, w, sel }) {
+    const width = w || 66;
+    const height = Math.round(width * 1.42);
+    return (React.createElement("div", { className: "lex-book" + (sel ? " sel" : ""), style: { width: width, height: height, backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? "#e6e6df" : bookColor(book.title || "") } }, !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)));
+}
+function AddBookModal({ onClose, onAdd }) {
+    const [title, setTitle] = useState("");
+    const [author, setAuthor] = useState("");
+    const [sugs, setSugs] = useState([]);
+    const [searching, setSearching] = useState(false);
+    const [covers, setCovers] = useState([]);
+    const [cover, setCover] = useState("");
+    const [loadingCovers, setLoadingCovers] = useState(false);
+    const [picked, setPicked] = useState(false);
+    const tRef = useRef(null);
+    useEffect(() => {
+        const q = title.trim();
+        if (picked || q.length < 2) {
+            setSugs([]);
+            return;
+        }
+        if (tRef.current)
+            clearTimeout(tRef.current);
+        tRef.current = setTimeout(async () => { setSearching(true); const r = await olSearch(q); setSearching(false); setSugs(r); }, 420);
+        return () => { if (tRef.current)
+            clearTimeout(tRef.current); };
+    }, [title, picked]);
+    const pick = async (s) => {
+        setPicked(true);
+        setTitle(s.title);
+        setAuthor(s.author || "");
+        setSugs([]);
+        setLoadingCovers(true);
+        setCovers([]);
+        setCover("");
+        let list = await olCovers(s.workKey);
+        if ((!list || !list.length) && s.coverId)
+            list = [{ id: s.coverId, url: "https://covers.openlibrary.org/b/id/" + s.coverId + "-M.jpg" }];
+        setCovers(list || []);
+        if (list && list.length)
+            setCover(list[0].url);
+        setLoadingCovers(false);
+    };
+    const submit = () => { const t = title.trim(); if (!t)
+        return; onAdd({ title: t, author: author.trim(), cover: cover || "" }); };
+    return (React.createElement("div", { className: "lex-modal-bg", onClick: onClose },
+        React.createElement("div", { className: "lex-modal", onClick: (e) => e.stopPropagation() },
+            React.createElement("div", { className: "lex-modal-title" }, "nowa ksi\u0105\u017Cka"),
+            React.createElement("input", { className: "lex-field", autoFocus: true, value: title, onChange: (e) => { setPicked(false); setTitle(e.target.value); }, placeholder: "tytu\u0142 \u2014 zacznij pisa\u0107, podpowiem", style: { fontSize: 16, fontWeight: 700, padding: "12px 13px" } }),
+            searching && React.createElement("div", { style: { fontSize: 12, color: C.inkSoft, marginTop: 6, fontWeight: 600 } }, "szukam\u2026"),
+            sugs.length > 0 && (React.createElement("div", { className: "lex-sug" }, sugs.map((s, i) => (React.createElement("div", { key: i, className: "lex-sug-item", onClick: () => pick(s) },
+                s.coverId
+                    ? React.createElement("img", { src: "https://covers.openlibrary.org/b/id/" + s.coverId + "-S.jpg", alt: "", style: { width: 30, height: 44, objectFit: "cover", borderRadius: 2, flexShrink: 0 } })
+                    : React.createElement("div", { style: { width: 30, height: 44, borderRadius: 2, background: bookColor(s.title), flexShrink: 0 } }),
+                React.createElement("div", { style: { minWidth: 0 } },
+                    React.createElement("div", { style: { fontSize: 14, fontWeight: 700, lineHeight: 1.2 } }, s.title),
+                    s.author && React.createElement("div", { style: { fontSize: 12, color: C.inkSoft } }, s.author))))))),
+            React.createElement("input", { className: "lex-field", value: author, onChange: (e) => setAuthor(e.target.value), placeholder: "autor", style: { fontSize: 15, padding: "11px 13px", marginTop: 8 } }),
+            loadingCovers && React.createElement("div", { style: { fontSize: 12, color: C.inkSoft, marginTop: 10, fontWeight: 600 } }, "\u0142aduj\u0119 ok\u0142adki\u2026"),
+            covers.length > 0 && (React.createElement("div", { style: { marginTop: 12 } },
+                React.createElement("div", { style: { fontSize: 11, letterSpacing: ".1em", color: C.inkSoft, fontWeight: 700, marginBottom: 6 } }, "wybierz ok\u0142adk\u0119"),
+                React.createElement("div", { className: "lex-cover-grid" },
+                    covers.map((c, i) => (React.createElement("div", { key: i, onClick: () => setCover(c.url), className: "lex-cover-opt" + (cover === c.url ? " sel" : ""), style: { backgroundImage: `url(${c.url})` } }))),
+                    React.createElement("div", { onClick: () => setCover(""), className: "lex-cover-opt none" + (cover === "" ? " sel" : "") }, "bez")))),
+            React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 16 } },
+                React.createElement("button", { onClick: submit, disabled: !title.trim(), className: "lex-primary", style: { flex: 1, padding: "12px", borderRadius: 11, border: "none", background: C.lime, color: C.ink, fontSize: 15, fontWeight: 800, cursor: "pointer" } }, "dodaj"),
+                React.createElement("button", { onClick: onClose, className: "lex-primary", style: { padding: "12px 16px", borderRadius: 11, border: `1px solid ${C.ink}`, background: "transparent", color: C.ink, fontSize: 15, fontWeight: 700, cursor: "pointer" } }, "anuluj")))));
+}
+function Flashcards({ book, onClose }) {
+    const cards = book.entries || [];
+    const [order, setOrder] = useState(() => cards.map((_, i) => i));
+    const [pos, setPos] = useState(0);
+    const [flipped, setFlipped] = useState(false);
+    const go = (d) => { setFlipped(false); setPos(p => { let n = p + d; if (n < 0)
+        n = order.length - 1; if (n >= order.length)
+        n = 0; return n; }); };
+    const shuffle = () => { const o = order.slice(); for (let i = o.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = o[i];
+        o[i] = o[j];
+        o[j] = t;
+    } setOrder(o); setPos(0); setFlipped(false); };
+    const e = cards.length ? cards[order[pos]] : null;
+    return (React.createElement("div", { className: "lex-fc" },
+        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 12, padding: "16px 18px", borderBottom: `1px solid ${C.line}` } },
+            React.createElement("button", { onClick: onClose, className: "lex-icon-btn", "aria-label": "zamknij", style: { border: "none", background: "transparent", fontSize: 20, cursor: "pointer" } }, "\u2715"),
+            React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                React.createElement("div", { style: { fontSize: 16, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } },
+                    "fiszki \u2014 ",
+                    book.title),
+                cards.length > 0 && React.createElement("div", { style: { fontSize: 12, color: C.inkSoft, fontWeight: 600 } },
+                    pos + 1,
+                    " / ",
+                    order.length)),
+            cards.length > 1 && React.createElement("button", { onClick: shuffle, className: "lex-primary", style: { border: "none", background: C.paperDeep, color: C.ink, fontWeight: 800, fontSize: 13, padding: "8px 12px", borderRadius: 10, cursor: "pointer" } }, "tasuj")),
+        !cards.length ? (React.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", color: C.inkSoft, fontWeight: 600 } }, "brak s\u0142\u00F3w w tej ksi\u0105\u017Cce \u2014 dodaj kilka, a wr\u00F3c\u0105 tu jako fiszki.")) : (React.createElement(React.Fragment, null,
+            React.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "18px" } },
+                React.createElement("div", { className: "lex-card", onClick: () => setFlipped(f => !f), style: { width: "min(90vw,440px)", height: "min(62vh,520px)" } },
+                    React.createElement("div", { className: "lex-card-inner" + (flipped ? " flipped" : "") },
+                        React.createElement("div", { className: "lex-face front" },
+                            React.createElement("div", { style: { fontSize: 34, fontWeight: 800, letterSpacing: "-.02em" } }, e.word),
+                            e.ipa && React.createElement("div", { style: { fontSize: 15, color: C.inkSoft, marginTop: 6 } }, e.ipa),
+                            React.createElement("div", { style: { marginTop: 16 } },
+                                React.createElement(SpeakerBtn, { entry: e, size: 44 })),
+                            React.createElement("div", { style: { position: "absolute", bottom: 18, fontSize: 12, color: C.inkSoft, fontWeight: 600 } }, "dotknij, aby odwr\u00F3ci\u0107")),
+                        React.createElement("div", { className: "lex-face back" },
+                            React.createElement("div", { style: { fontSize: 27, fontWeight: 700 } }, e.pl),
+                            e.pos && React.createElement("div", { style: { fontSize: 14, color: C.olive, fontWeight: 700, marginTop: 4 } }, e.pos.toLowerCase()),
+                            e.sentence && React.createElement("div", { style: { fontStyle: "italic", fontSize: 16, lineHeight: 1.5, marginTop: 16, color: C.ink } }, e.sentence),
+                            e.sentencePl && React.createElement("div", { style: { fontSize: 14, color: C.inkSoft, marginTop: 6, lineHeight: 1.5 } }, e.sentencePl))))),
+            React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", gap: 18, padding: "10px 18px 24px" } },
+                React.createElement("button", { onClick: () => go(-1), className: "lex-primary", style: { width: 56, height: 56, borderRadius: 16, border: "none", background: C.paperDeep, color: C.ink, fontSize: 24, cursor: "pointer" } }, "\u2039"),
+                React.createElement("button", { onClick: () => setFlipped(f => !f), className: "lex-primary", style: { height: 56, padding: "0 22px", borderRadius: 16, border: "none", background: C.lime, color: C.ink, fontSize: 15, fontWeight: 800, cursor: "pointer" } }, "odwr\u00F3\u0107"),
+                React.createElement("button", { onClick: () => go(1), className: "lex-primary", style: { width: 56, height: 56, borderRadius: 16, border: "none", background: C.paperDeep, color: C.ink, fontSize: 24, cursor: "pointer" } }, "\u203A"))))));
 }
 function App() {
     const [books, setBooks] = useState([]);
@@ -358,19 +492,17 @@ function App() {
     const [sentence, setSentence] = useState("");
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
+    const [sug, setSug] = useState([]);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [addingBook, setAddingBook] = useState(false);
-    const [newTitle, setNewTitle] = useState("");
-    const [newAuthor, setNewAuthor] = useState("");
+    const [showAdd, setShowAdd] = useState(false);
+    const [showCards, setShowCards] = useState(false);
     const [query, setQuery] = useState("");
     const scrollRef = useRef(null);
     const wordRef = useRef(null);
     const sentenceRef = useRef(null);
     const stampRef = useRef(0);
     const pushT = useRef(null);
-    const syncDot = syncState === "zsynchronizowano" ? C.lime
-        : syncState === "błąd synchronizacji" || syncState === "błąd zapisu" ? C.danger
-            : syncState === "tylko to urządzenie" ? "#9aa" : C.shelfMute;
+    const syncDot = syncState === "zsynchronizowano" ? C.lime : (syncState === "błąd synchronizacji" || syncState === "błąd zapisu") ? C.danger : syncState === "tylko to urządzenie" ? "#9aa" : C.shelfMute;
     useEffect(() => {
         const lib = loadLocal();
         if (lib && Array.isArray(lib.books)) {
@@ -395,7 +527,7 @@ function App() {
                 stampRef.current = data.updatedAt || 0;
                 setBooks(data.books);
                 saveLocal({ books: data.books, updatedAt: stampRef.current });
-                setActiveId((cur) => (cur && data.books.some((b) => b.id === cur)) ? cur : (data.books[0] ? data.books[0].id : null));
+                setActiveId(cur => (cur && data.books.some(b => b.id === cur)) ? cur : (data.books[0] ? data.books[0].id : null));
             }
             else if (!snap.exists) {
                 const lib = loadLocal();
@@ -419,53 +551,53 @@ function App() {
         setSyncState("zapisuję…");
         if (pushT.current)
             clearTimeout(pushT.current);
-        pushT.current = setTimeout(() => {
-            doc.set(lib).then(() => setSyncState("zsynchronizowano")).catch((e) => { console.error(e); setSyncState("błąd zapisu"); });
-        }, 400);
+        pushT.current = setTimeout(() => { doc.set(lib).then(() => setSyncState("zsynchronizowano")).catch(e => { console.error(e); setSyncState("błąd zapisu"); }); }, 400);
     }, []);
-    const setAndPersist = useCallback((updater) => {
-        setBooks((prev) => {
-            const next = typeof updater === "function" ? updater(prev) : updater;
-            persist(next);
-            return next;
-        });
-    }, [persist]);
-    const activeBook = books.find((b) => b.id === activeId) || null;
+    const setAndPersist = useCallback((updater) => { setBooks(prev => { const next = typeof updater === "function" ? updater(prev) : updater; persist(next); return next; }); }, [persist]);
+    const activeBook = books.find(b => b.id === activeId) || null;
     const entries = activeBook ? activeBook.entries : [];
+    useEffect(() => { const el = scrollRef.current; if (el)
+        el.scrollTop = el.scrollHeight; }, [entries.length, busy, activeId]);
     useEffect(() => {
-        const el = scrollRef.current;
-        if (el)
-            el.scrollTop = el.scrollHeight;
-    }, [entries.length, busy, activeId]);
-    const addBook = () => {
-        const t = newTitle.trim();
-        if (!t)
+        const w = word.trim().toLowerCase();
+        if (w.length < 3) {
+            setSug([]);
             return;
-        const b = { id: uid(), title: t, author: newAuthor.trim(), createdAt: Date.now(), entries: [] };
-        setAndPersist((prev) => [b, ...prev]);
+        }
+        let cancel = false;
+        const t = setTimeout(async () => {
+            const s = await suggestWord(w);
+            if (cancel)
+                return;
+            const lc = s.map(x => x.toLowerCase());
+            if (!lc.length || lc[0] === w || lc.indexOf(w) >= 0)
+                setSug([]);
+            else
+                setSug(s.slice(0, 4));
+        }, 480);
+        return () => { cancel = true; clearTimeout(t); };
+    }, [word]);
+    const addBook = (data) => {
+        const b = { id: uid(), title: data.title, author: data.author || "", cover: data.cover || "", createdAt: Date.now(), entries: [] };
+        setAndPersist(prev => [b, ...prev]);
         setActiveId(b.id);
-        setNewTitle("");
-        setNewAuthor("");
-        setAddingBook(false);
+        setShowAdd(false);
         setSidebarOpen(false);
     };
-    const deleteBook = (id) => {
-        if (!window.confirm("Usunąć tę książkę i wszystkie zapisane słowa?"))
-            return;
-        const remaining = books.filter((b) => b.id !== id);
-        setAndPersist(remaining);
-        if (activeId === id)
-            setActiveId(remaining[0] ? remaining[0].id : null);
-    };
+    const deleteBook = (id) => { if (!window.confirm("Usunąć tę książkę i wszystkie zapisane słowa?"))
+        return; const remaining = books.filter(b => b.id !== id); setAndPersist(remaining); if (activeId === id)
+        setActiveId(remaining[0] ? remaining[0].id : null); };
+    const selectBook = (id) => { setActiveId(id); setSidebarOpen(false); setQuery(""); };
     const submit = async () => {
         const w = word.trim();
         if (!w || !activeId || busy)
             return;
         setBusy(true);
         setError("");
+        setSug([]);
         try {
             const entry = await lookupWord({ word: w, sentence });
-            setAndPersist((prev) => prev.map((b) => b.id === activeId ? { ...b, entries: [...b.entries, entry] } : b));
+            setAndPersist(prev => prev.map(b => b.id === activeId ? { ...b, entries: [...b.entries, entry] } : b));
             setWord("");
             setSentence("");
             wordRef.current && wordRef.current.focus();
@@ -478,47 +610,38 @@ function App() {
             setBusy(false);
         }
     };
-    const deleteEntry = (eid) => {
-        setAndPersist((prev) => prev.map((b) => b.id === activeId ? { ...b, entries: b.entries.filter((e) => e.id !== eid) } : b));
-    };
+    const deleteEntry = (eid) => { setAndPersist(prev => prev.map(b => b.id === activeId ? { ...b, entries: b.entries.filter(e => e.id !== eid) } : b)); };
     const onWordKey = (ev) => { if (ev.key === "Enter" && !ev.shiftKey) {
         ev.preventDefault();
         submit();
     } };
-    const filtered = query.trim()
-        ? entries.filter((e) => (e.word + " " + e.pl).toLowerCase().includes(query.trim().toLowerCase()))
-        : entries;
+    const filtered = query.trim() ? entries.filter(e => (e.word + " " + e.pl).toLowerCase().includes(query.trim().toLowerCase())) : entries;
     const countLabel = (n) => (n === 1 ? "słowo" : n >= 2 && n <= 4 ? "słowa" : "słów");
     return (React.createElement("div", { className: "lex-root", style: { height: "100vh", display: "flex", background: C.paper, overflow: "hidden" } },
-        React.createElement("style", null, CSS),
-        sidebarOpen && (React.createElement("div", { onClick: () => setSidebarOpen(false), className: "lex-overlay", style: { position: "fixed", inset: 0, background: "#0007", zIndex: 30 } })),
+        React.createElement("style", null, LEX_CSS),
+        sidebarOpen && React.createElement("div", { onClick: () => setSidebarOpen(false), className: "lex-overlay", style: { position: "fixed", inset: 0, background: "#0007", zIndex: 30 } }),
         React.createElement("aside", { className: "lex-aside lex-shelf-scroll" + (sidebarOpen ? " open" : ""), style: { width: 280, flexShrink: 0, background: C.shelf, color: C.shelfText, display: "flex", flexDirection: "column", overflowY: "auto", zIndex: 40 } },
-            React.createElement("div", { style: { padding: "22px 20px 14px" } },
+            React.createElement("div", { style: { padding: "22px 20px 12px" } },
                 React.createElement("div", { style: { fontSize: 30, fontWeight: 900, letterSpacing: "-.04em", lineHeight: 1 } }, "czytelnia"),
                 React.createElement("div", { style: { fontSize: 12, color: C.shelfMute, marginTop: 4, fontWeight: 700 } }, "tw\u00F3j s\u0142ownik czytelnika"),
                 React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 9, fontSize: 11, color: C.shelfMute, fontWeight: 700 } },
                     React.createElement("span", { style: { width: 7, height: 7, borderRadius: 7, background: syncDot } }),
                     " ",
                     syncState)),
-            React.createElement("div", { style: { padding: "0 12px 12px", flex: 1 } },
-                React.createElement("div", { style: { fontSize: 11, color: C.shelfMute, padding: "8px 8px 6px", letterSpacing: ".1em", textTransform: "lowercase", fontWeight: 700 } }, "ksi\u0105\u017Cki"),
-                books.map((b) => {
-                    const on = b.id === activeId;
-                    return (React.createElement("div", { key: b.id, className: "lex-book-btn", onClick: () => { setActiveId(b.id); setSidebarOpen(false); setQuery(""); }, style: { display: "flex", gap: 10, alignItems: "flex-start", padding: "10px", borderRadius: 8, cursor: "pointer", marginBottom: 2, background: on ? C.shelfSoft : "transparent", borderLeft: `3px solid ${on ? C.ink : "transparent"}` } },
-                        React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-                            React.createElement("div", { style: { fontSize: 16, fontWeight: 700, lineHeight: 1.25, color: C.shelfText, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, b.title),
-                            b.author && React.createElement("div", { style: { fontSize: 12, color: C.shelfMute, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, b.author)),
-                        React.createElement("button", { onClick: (ev) => { ev.stopPropagation(); deleteBook(b.id); }, "aria-label": "usu\u0144 ksi\u0105\u017Ck\u0119", className: "lex-icon-btn", style: { border: "none", background: "transparent", color: C.shelfMute, opacity: .6, fontSize: 17, lineHeight: 1, padding: 2 } }, "\u00D7")));
-                }),
-                loaded && books.length === 0 && (React.createElement("div", { style: { padding: "12px 8px", fontSize: 13, color: C.shelfMute, lineHeight: 1.5, fontWeight: 500 } }, "brak ksi\u0105\u017Cek. dodaj pierwsz\u0105, \u017Ceby zacz\u0105\u0107 zbiera\u0107 s\u0142owa."))),
-            React.createElement("div", { style: { padding: 12, borderTop: `1px solid ${C.shelfSoft}` } }, addingBook ? (React.createElement("div", null,
-                React.createElement("input", { className: "lex-in", autoFocus: true, value: newTitle, onChange: (e) => setNewTitle(e.target.value), onKeyDown: (e) => e.key === "Enter" && addBook(), placeholder: "tytu\u0142 ksi\u0105\u017Cki", style: { width: "100%", marginBottom: 6, padding: "9px 10px", borderRadius: 7, border: `1px solid ${C.shelfSoft}`, background: "#fff", color: C.ink, fontSize: 14 } }),
-                React.createElement("input", { className: "lex-in", value: newAuthor, onChange: (e) => setNewAuthor(e.target.value), onKeyDown: (e) => e.key === "Enter" && addBook(), placeholder: "autor (opcjonalnie)", style: { width: "100%", marginBottom: 8, padding: "9px 10px", borderRadius: 7, border: `1px solid ${C.shelfSoft}`, background: "#fff", color: C.ink, fontSize: 14 } }),
-                React.createElement("div", { style: { display: "flex", gap: 6 } },
-                    React.createElement("button", { onClick: addBook, className: "lex-primary", style: { flex: 1, padding: "9px", borderRadius: 7, border: "none", background: C.ink, color: C.lime, fontSize: 14, fontWeight: 700, cursor: "pointer" } }, "dodaj"),
-                    React.createElement("button", { onClick: () => { setAddingBook(false); setNewTitle(""); setNewAuthor(""); }, style: { padding: "9px 12px", borderRadius: 7, border: `1px solid ${C.ink}`, background: "transparent", color: C.ink, fontSize: 14, cursor: "pointer", fontWeight: 700 } }, "anuluj")))) : (React.createElement("button", { onClick: () => setAddingBook(true), className: "lex-book-btn", style: { width: "100%", padding: "11px", borderRadius: 8, border: `1px dashed ${C.ink}`, background: "transparent", color: C.ink, fontSize: 14, cursor: "pointer", textAlign: "left", fontWeight: 700 } }, "+ nowa ksi\u0105\u017Cka")))),
+            React.createElement("div", { style: { padding: "4px 12px 16px", flex: 1 } },
+                React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } },
+                    books.map(b => (React.createElement("div", { key: b.id, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
+                        React.createElement("div", { style: { position: "relative" } },
+                            React.createElement("div", { onClick: () => selectBook(b.id) },
+                                React.createElement(BookThumb, { book: b, sel: b.id === activeId })),
+                            b.id === activeId && React.createElement("button", { className: "lex-book-x", style: { display: "flex" }, onClick: () => deleteBook(b.id), "aria-label": "usu\u0144 ksi\u0105\u017Ck\u0119" }, "\u00D7")),
+                        React.createElement("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.shelfText, textAlign: "center", lineHeight: 1.25, wordBreak: "break-word", width: "100%" } }, b.title)))),
+                    React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
+                        React.createElement("button", { className: "lex-addtile", onClick: () => setShowAdd(true), style: { width: 66, height: 94 } }, "+"),
+                        React.createElement("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.shelfMute } }, "dodaj"))),
+                loaded && books.length === 0 && React.createElement("div", { style: { padding: "14px 4px", fontSize: 13, color: C.shelfMute, lineHeight: 1.5, fontWeight: 600 } }, "brak ksi\u0105\u017Cek. dodaj pierwsz\u0105, \u017Ceby zacz\u0105\u0107 zbiera\u0107 s\u0142owa."))),
         React.createElement("main", { style: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 } },
-            React.createElement("header", { style: { display: "flex", alignItems: "center", gap: 12, padding: "16px 20px", borderBottom: `1px solid ${C.line}`, background: C.paper } },
+            React.createElement("header", { style: { display: "flex", alignItems: "center", gap: 12, padding: "14px 20px", borderBottom: `1px solid ${C.line}`, background: C.paper } },
                 React.createElement("button", { onClick: () => setSidebarOpen(true), "aria-label": "poka\u017C ksi\u0105\u017Cki", className: "lex-icon-btn lex-menu", style: { border: "none", background: "transparent", color: C.ink, fontSize: 20, padding: 4, alignItems: "center" } }, "\u2630"),
                 React.createElement("div", { style: { flex: 1, minWidth: 0 } }, activeBook ? (React.createElement(React.Fragment, null,
                     React.createElement("h1", { style: { margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: "-.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, activeBook.title),
@@ -526,42 +649,65 @@ function App() {
                         activeBook.author ? activeBook.author + " · " : "",
                         entries.length,
                         " ",
-                        countLabel(entries.length)))) : (React.createElement("h1", { style: { margin: 0, fontSize: 22, fontWeight: 900, letterSpacing: "-.03em" } }, "czytelnia"))),
-                activeBook && entries.length > 0 && (React.createElement("input", { className: "lex-in", value: query, onChange: (e) => setQuery(e.target.value), placeholder: "szukaj s\u0142owa\u2026", style: { width: 150, padding: "8px 11px", borderRadius: 8, border: `1px solid ${C.line}`, background: "#fff", color: C.ink, fontSize: 13.5 } }))),
-            React.createElement("div", { ref: scrollRef, className: "lex-scroll", style: { flex: 1, overflowY: "auto", padding: "8px 24px" } }, !activeBook ? (React.createElement(Empty, { kind: "nobook", onAdd: () => { setSidebarOpen(true); setAddingBook(true); } })) : filtered.length === 0 ? (React.createElement(Empty, { kind: query ? "nofind" : "nowords" })) : (React.createElement("div", { style: { maxWidth: 680, margin: "0 auto" } },
-                filtered.map((e) => React.createElement(Entry, { key: e.id, e: e, onDelete: deleteEntry })),
-                busy && (React.createElement("div", { style: { padding: "22px 2px", color: C.inkSoft } },
-                    React.createElement("span", { style: { fontStyle: "italic", fontSize: 17 } }, "t\u0142umacz\u0119"),
-                    React.createElement("span", { className: "lex-dots", style: { marginLeft: 2 } },
-                        React.createElement("span", null, "."),
-                        React.createElement("span", null, "."),
-                        React.createElement("span", null, "."))))))),
-            activeBook && (React.createElement("div", { style: { borderTop: `1px solid ${C.line}`, background: C.paperDeep, padding: "14px 24px 18px" } },
+                        countLabel(entries.length)))) : React.createElement("h1", { style: { margin: 0, fontSize: 22, fontWeight: 900, letterSpacing: "-.03em" } }, "czytelnia")),
+                activeBook && entries.length > 0 && (React.createElement(React.Fragment, null,
+                    React.createElement("button", { onClick: () => setShowCards(true), className: "lex-primary", style: { border: "none", background: C.lime, color: C.ink, fontWeight: 800, fontSize: 13, padding: "8px 13px", borderRadius: 10, cursor: "pointer", whiteSpace: "nowrap" } }, "fiszki"),
+                    React.createElement("input", { className: "lex-field", value: query, onChange: (e) => setQuery(e.target.value), placeholder: "szukaj\u2026", style: { width: 110, padding: "8px 11px", fontSize: 13.5, background: "#fff" } })))),
+            React.createElement("div", { ref: scrollRef, className: "lex-scroll", style: { flex: 1, overflowY: "auto", padding: "8px 24px" } }, !activeBook ? React.createElement(Empty, { kind: "nobook", onAdd: () => setShowAdd(true) })
+                : filtered.length === 0 ? React.createElement(Empty, { kind: query ? "nofind" : "nowords" })
+                    : (React.createElement("div", { style: { maxWidth: 680, margin: "0 auto" } },
+                        filtered.map(e => React.createElement(Entry, { key: e.id, e: e, onDelete: deleteEntry })),
+                        busy && React.createElement("div", { style: { padding: "22px 2px", color: C.inkSoft } },
+                            React.createElement("span", { style: { fontStyle: "italic", fontSize: 17 } }, "t\u0142umacz\u0119"),
+                            React.createElement("span", { className: "lex-dots", style: { marginLeft: 2 } },
+                                React.createElement("span", null, "."),
+                                React.createElement("span", null, "."),
+                                React.createElement("span", null, ".")))))),
+            activeBook && (React.createElement("div", { style: { borderTop: `1px solid ${C.line}`, background: C.paperDeep, padding: "14px 24px 16px" } },
                 React.createElement("div", { style: { maxWidth: 680, margin: "0 auto" } },
                     error && React.createElement("div", { style: { marginBottom: 10, fontSize: 13, color: C.danger, fontWeight: 600 } }, error),
-                    React.createElement("div", { className: "lex-composer", style: { padding: "14px 16px" } },
-                        React.createElement("div", { className: "lex-chip", style: { marginBottom: 7 } }, "en \u2192 pl"),
-                        React.createElement("input", { ref: wordRef, value: word, onChange: (e) => setWord(e.target.value), onKeyDown: onWordKey, placeholder: "s\u0142owo po angielsku", className: "lex-bare", autoComplete: "off", autoCapitalize: "none", autoCorrect: "off", spellCheck: false, enterKeyHint: "go", style: { fontSize: 19, fontWeight: 700, padding: "4px 0" } }),
-                        React.createElement("textarea", { ref: sentenceRef, value: sentence, onChange: (e) => setSentence(e.target.value), onKeyDown: onWordKey, placeholder: "zdanie z ksi\u0105\u017Cki \u2014 opcjonalnie, dla dok\u0142adnego t\u0142umaczenia", className: "lex-bare", enterKeyHint: "send", style: { width: "100%", marginTop: 12, fontSize: 16, lineHeight: 1.6, padding: "13px 14px", minHeight: 140, resize: "vertical", background: "#F6F8EE", border: `1px solid ${C.line}`, borderRadius: 12, fontStyle: sentence ? "italic" : "normal", color: C.ink } }),
-                        React.createElement("button", { onClick: submit, disabled: !word.trim() || busy, className: "lex-send", style: { width: "100%", height: 52, marginTop: 12, borderRadius: 14, border: "none", background: C.lime, color: C.ink, fontSize: 16.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 } }, busy ? "tłumaczę…" : React.createElement(React.Fragment, null,
-                            "t\u0142umacz ",
-                            React.createElement("span", { style: { fontSize: 19, lineHeight: 1, marginTop: -1 } }, "\u2192")))),
-                    React.createElement("div", { style: { marginTop: 8, padding: "0 4px", fontSize: 11.5, color: C.inkSoft, opacity: .85, fontWeight: 600 } }, "\u21B5 t\u0142umaczy \u00A0\u00B7\u00A0 \u21E7\u21B5 nowa linia w zdaniu \u00A0\u00B7\u00A0 \uD83D\uDD0A wymowa po dodaniu")))))));
+                    React.createElement("div", { style: { fontSize: 11, letterSpacing: ".14em", color: C.inkSoft, fontWeight: 700, marginBottom: 7 } }, "en \u2192 pl"),
+                    React.createElement("input", { ref: wordRef, value: word, onChange: (e) => setWord(e.target.value), onKeyDown: onWordKey, placeholder: "s\u0142owo po angielsku", className: "lex-field", autoComplete: "off", autoCapitalize: "none", autoCorrect: "off", spellCheck: false, enterKeyHint: "go", style: { fontSize: 17, fontWeight: 700, padding: "11px 13px" } }),
+                    sug.length > 0 && (React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 7, marginTop: 8 } },
+                        React.createElement("span", { style: { fontSize: 12.5, color: C.inkSoft, fontWeight: 600 } }, "czy chodzi\u0142o ci o:"),
+                        sug.map((s, i) => (React.createElement("button", { key: i, onClick: () => { setWord(s); setSug([]); wordRef.current && wordRef.current.focus(); }, className: "lex-primary", style: { border: `1px solid ${C.limeDeep}`, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 13, padding: "4px 10px", borderRadius: 20, cursor: "pointer" } }, s))))),
+                    React.createElement("textarea", { ref: sentenceRef, value: sentence, onChange: (e) => setSentence(e.target.value), onKeyDown: onWordKey, placeholder: "zdanie z ksi\u0105\u017Cki \u2014 opcjonalnie, dla dok\u0142adnego t\u0142umaczenia", className: "lex-field", enterKeyHint: "send", style: { marginTop: 10, fontSize: 16, lineHeight: 1.6, padding: "13px 14px", minHeight: 120, resize: "vertical", fontStyle: sentence ? "italic" : "normal" } }),
+                    React.createElement("button", { onClick: submit, disabled: !word.trim() || busy, className: "lex-send", style: { width: "100%", height: 52, marginTop: 12, borderRadius: 14, border: "none", background: C.lime, color: C.ink, fontSize: 16.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 } }, busy ? "tłumaczę…" : React.createElement(React.Fragment, null,
+                        "t\u0142umacz ",
+                        React.createElement("span", { style: { fontSize: 19, lineHeight: 1, marginTop: -1 } }, "\u2192"))))))),
+        showAdd && React.createElement(AddBookModal, { onClose: () => setShowAdd(false), onAdd: addBook }),
+        showCards && activeBook && React.createElement(Flashcards, { book: activeBook, onClose: () => setShowCards(false) })));
 }
 function Empty({ kind, onAdd }) {
-    const map = {
-        nobook: { t: "zacznij od książki", d: "każda książka to osobny wątek. dodaj tytuł, który właśnie czytasz po angielsku, i zacznij zbierać słowa.", btn: "dodaj książkę" },
-        nowords: { t: "pusta strona czeka", d: "podyktuj na dole pierwsze słowo. dostaniesz tłumaczenie i zdanie, z którego pochodzi.", btn: null },
-        nofind: { t: "nic nie znaleziono", d: "żadne zapisane słowo nie pasuje do wyszukiwania.", btn: null },
-    };
+    const map = { nobook: { t: "zacznij od książki", d: "każda książka to osobny wątek. dodaj tytuł, który właśnie czytasz po angielsku, i zacznij zbierać słowa.", btn: "dodaj książkę" }, nowords: { t: "pusta strona czeka", d: "podyktuj na dole pierwsze słowo. dostaniesz tłumaczenie i zdanie, z którego pochodzi.", btn: null }, nofind: { t: "nic nie znaleziono", d: "żadne zapisane słowo nie pasuje do wyszukiwania.", btn: null } };
     const m = map[kind];
-    return (React.createElement("div", { style: { maxWidth: 460, margin: "12% auto 0", textAlign: "center", padding: 24 } },
+    return (React.createElement("div", { style: { maxWidth: 460, margin: "10% auto 0", textAlign: "center", padding: 24 } },
         React.createElement("div", { style: { fontSize: 28, fontWeight: 900, letterSpacing: "-.03em", color: C.ink, marginBottom: 10 } }, m.t),
         React.createElement("p", { style: { fontSize: 15, color: C.inkSoft, lineHeight: 1.6, margin: 0, fontWeight: 500 } }, m.d),
-        m.btn && (React.createElement("button", { onClick: onAdd, className: "lex-primary", style: { marginTop: 18, padding: "11px 22px", borderRadius: 9, border: "none", background: C.lime, color: C.ink, fontSize: 15, fontWeight: 800, cursor: "pointer" } }, m.btn))));
+        m.btn && React.createElement("button", { onClick: onAdd, className: "lex-primary", style: { marginTop: 18, padding: "11px 22px", borderRadius: 9, border: "none", background: C.lime, color: C.ink, fontSize: 15, fontWeight: 800, cursor: "pointer" } }, m.btn)));
 }
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(React.createElement(App, null));
+class ErrorBoundary extends React.Component {
+    constructor(props) { super(props); this.state = { err: null }; }
+    static getDerivedStateFromError(err) { return { err: err }; }
+    componentDidCatch(err, info) { console.error(err, info); }
+    render() {
+        if (this.state.err) {
+            const msg = (this.state.err && this.state.err.stack) ? this.state.err.stack : String(this.state.err);
+            return (React.createElement("pre", { style: { fontFamily: "Arial, sans-serif", padding: "20px 22px", whiteSpace: "pre-wrap", color: "#0B0B0A", fontSize: 14, lineHeight: 1.55, margin: 0 } }, "Aplikacja napotkała błąd:\n\n" + msg));
+        }
+        return this.props.children;
+    }
+}
+try {
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(React.createElement(ErrorBoundary, null,
+        React.createElement(App, null)));
+}
+catch (e) {
+    const r = document.getElementById("root");
+    if (r)
+        r.textContent = "Błąd startu: " + ((e && e.stack) ? e.stack : e);
+}
 
 </script>
 </body>
