@@ -198,11 +198,14 @@ async function translate(text) {
         return await viaMyMemory(text);
     }
 }
+function cleanPolish(v) { v = String(v || "").trim(); if (!v)
+    return ""; if (!/^[A-Za-z\u00C0-\u017F\s\-]+$/.test(v))
+    return ""; return v; }
 async function translateDetailed(text) {
     let best = "";
     const alts = [];
     const seen = {};
-    const add = function (t) { const v = String(t || "").trim(); if (!v)
+    const add = function (t) { const v = cleanPolish(t); if (!v || v.length < 2)
         return; if (v.split(/\s+/).length > 4)
         return; const lc = v.toLowerCase(); if (seen[lc])
         return; seen[lc] = 1; alts.push(v); };
@@ -216,38 +219,21 @@ async function translateDetailed(text) {
             add(a);
     }
     catch (e) { }
-    try {
-        const r = await fetch("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text) + "&langpair=en|pl");
-        if (r.ok) {
-            const d = await r.json();
-            let mm = (d && d.responseData && d.responseData.translatedText) ? decodeHtml(String(d.responseData.translatedText).trim()) : "";
-            if (/MYMEMORY WARNING|INVALID|PLEASE SELECT/i.test(mm))
-                mm = "";
-            if (mm) {
-                if (!best) {
-                    best = mm;
-                    seen[best.toLowerCase()] = 1;
-                }
-                else
-                    add(mm);
-            }
-            if (Array.isArray(d.matches)) {
-                const ms = d.matches.slice().sort((a, b) => (parseFloat(b.quality || "0")) - (parseFloat(a.quality || "0")));
-                for (const m of ms) {
-                    if (alts.length >= 8)
-                        break;
-                    add((m && m.translation) ? decodeHtml(String(m.translation)) : "");
-                }
-            }
-        }
-    }
-    catch (e) { }
     if (!best) {
-        if (alts.length)
-            best = alts.shift();
-        else
+        try {
             best = await viaGoogle(text);
+        }
+        catch (e) { }
     }
+    if (!best) {
+        try {
+            best = await viaMyMemory(text);
+        }
+        catch (e) { }
+    }
+    best = String(best || "").trim();
+    if (best)
+        seen[best.toLowerCase()] = 1;
     const out = alts.filter(function (a) { return a.toLowerCase() !== best.toLowerCase(); }).slice(0, 6);
     return { best, alts: out };
 }
@@ -306,8 +292,12 @@ async function fetchDict(word) {
         }
         const pos = entry.meanings && entry.meanings[0] ? entry.meanings[0].partOfSpeech : "";
         const examples = [];
+        const defs = [];
         for (const m of entry.meanings || []) {
+            const p = m.partOfSpeech || "";
             for (const def of m.definitions || []) {
+                if (def.definition)
+                    defs.push({ pos: p, definition: def.definition, example: def.example || "" });
                 if (def.example && examples.indexOf(def.example) < 0)
                     examples.push(def.example);
             }
@@ -319,7 +309,7 @@ async function fetchDict(word) {
             const uk = wa.find(p => /-uk\.mp3$/i.test(p.audio));
             audio = (us || uk || wa[0] || {}).audio || "";
         }
-        return { ipa, pos, example: examples[0] || "", examples: examples, audio };
+        return { ipa, pos, example: examples[0] || "", examples: examples, defs: defs.slice(0, 12), audio };
     }
     catch {
         return {};
@@ -333,6 +323,50 @@ function phraseKind(s) {
     if (parts.length <= 3 && PARTICLES.indexOf(parts[parts.length - 1]) >= 0)
         return "phrasal verb";
     return "idiom / wyrażenie";
+}
+async function wiktionaryPhrases(word) {
+    try {
+        const w = String(word || "").toLowerCase().trim();
+        if (!w || /\s/.test(w) || w.length < 3)
+            return [];
+        const r = await fetch("https://en.wiktionary.org/w/api.php?action=parse&page=" + encodeURIComponent(w) + "&prop=wikitext&format=json&origin=*");
+        if (!r.ok)
+            return [];
+        const d = await r.json();
+        const wt = (d && d.parse && d.parse.wikitext && d.parse.wikitext["*"]) ? String(d.parse.wikitext["*"]) : "";
+        if (!wt)
+            return [];
+        const out = [];
+        const seen = {};
+        const secRe = /={2,}\s*(Derived terms|Related terms)\s*={2,}([\s\S]*?)(?:\n={2,}[^=]|$)/gi;
+        let mm;
+        while ((mm = secRe.exec(wt))) {
+            const body = mm[2] || "";
+            const linkRe = /\{\{l\|en\|([^}|]+)[^}]*\}\}|\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g;
+            let lm;
+            while ((lm = linkRe.exec(body))) {
+                const term = String(lm[1] || lm[2] || "").trim().toLowerCase();
+                if (!term || term.indexOf(" ") < 0)
+                    continue;
+                if (term.split(/\s+/).indexOf(w) < 0)
+                    continue;
+                if (!/^[a-z][a-z '\-]+$/.test(term))
+                    continue;
+                if (seen[term])
+                    continue;
+                seen[term] = 1;
+                out.push(term);
+                if (out.length >= 8)
+                    break;
+            }
+            if (out.length >= 8)
+                break;
+        }
+        return out;
+    }
+    catch (e) {
+        return [];
+    }
 }
 async function lookupWord({ word, sentence }) {
     const hasSentence = sentence && sentence.trim().length > 0;
@@ -381,7 +415,7 @@ async function olCovers(workKey) {
     try {
         if (!workKey)
             return [];
-        const r = await fetch("https://openlibrary.org" + workKey + "/editions.json?limit=80");
+        const r = await fetch("https://openlibrary.org" + workKey + "/editions.json?limit=100");
         if (!r.ok)
             return [];
         const d = await r.json();
@@ -393,7 +427,7 @@ async function olCovers(workKey) {
                         ids.push(c);
                 }
         }
-        return ids.slice(0, 24).map(id => ({ id, url: "https://covers.openlibrary.org/b/id/" + id + "-M.jpg" }));
+        return ids.slice(0, 60).map(id => ({ id, url: "https://covers.openlibrary.org/b/id/" + id + "-M.jpg" }));
     }
     catch {
         return [];
@@ -507,20 +541,23 @@ function SpeakerBtn({ entry, size }) {
             React.createElement("path", { d: "M16.5 8.5a5 5 0 0 1 0 7" }),
             React.createElement("path", { d: "M19.5 6a8 8 0 0 1 0 12" }))));
 }
-function Entry({ e, onDelete, onPickAlt, onPickExample }) {
+function Entry({ e, onDelete, onEdit, onPickAlt, onPickExample }) {
     const cam = cambridgeUrl(e.word);
     return (React.createElement("article", { className: "lex-entry", style: { padding: "20px 2px", borderBottom: `1px solid ${C.line}` } },
-        React.createElement("div", { style: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 } },
-            React.createElement("a", { href: cam, target: "_blank", rel: "noopener noreferrer", title: "otw\u00F3rz definicj\u0119 w Cambridge Dictionary", style: { fontSize: 24, fontWeight: 700, letterSpacing: "-.02em", color: C.ink, textDecoration: "none", borderBottom: `2px solid ${C.lime}` } }, e.word),
+        React.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } },
+            React.createElement("a", { href: cam, target: "_blank", rel: "noopener noreferrer", title: "otw\u00F3rz definicj\u0119 w Cambridge Dictionary", style: { fontSize: 26, fontWeight: 700, letterSpacing: "-.02em", color: C.ink, textDecoration: "none", borderBottom: `2px solid ${C.lime}`, lineHeight: 1.15, wordBreak: "break-word" } }, e.word),
+            React.createElement("div", { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 } },
+                React.createElement(SpeakerBtn, { entry: e }),
+                React.createElement("button", { onClick: () => onEdit && onEdit(e), "aria-label": "edytuj has\u0142o", className: "lex-icon-btn", style: { border: "none", background: "transparent", color: C.inkSoft, opacity: .6, fontSize: 15, padding: 4, cursor: "pointer" } }, "\u270E"),
+                React.createElement("button", { onClick: () => onDelete(e.id), "aria-label": "usu\u0144 has\u0142o", className: "lex-icon-btn", style: { border: "none", background: "transparent", color: C.inkSoft, opacity: .45, fontSize: 12.5, padding: 4, cursor: "pointer" } }, "usu\u0144"))),
+        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 9, marginTop: 6 } },
             e.ipa && React.createElement("span", { style: { fontSize: 13.5, color: C.inkSoft } }, e.ipa),
             e.pos && React.createElement("span", { style: { fontSize: 13.5, color: C.olive, fontWeight: 700 } }, e.pos.toLowerCase()),
-            e.level && React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: "#fff", background: levelColor(e.level), borderRadius: 5, padding: "2px 6px", letterSpacing: ".04em" } }, e.level),
-            React.createElement("div", { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 } },
-                React.createElement(SpeakerBtn, { entry: e }),
-                React.createElement("button", { onClick: () => onDelete(e.id), "aria-label": "usu\u0144 has\u0142o", className: "lex-icon-btn", style: { border: "none", background: "transparent", color: C.inkSoft, opacity: .45, fontSize: 13, padding: 4, cursor: "pointer" } }, "usu\u0144"))),
-        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 5 } },
-            React.createElement("span", { style: { fontSize: 15.5, fontWeight: 600, color: C.inkSoft } }, e.pl),
-            e.alts && e.alts.length > 0 && e.alts.map((a, i) => (React.createElement("button", { key: i, onClick: () => onPickAlt && onPickAlt(e.id, a), className: "lex-primary", title: "ustaw jako g\u0142\u00F3wne t\u0142umaczenie", style: { border: `1px solid ${C.line}`, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 12, padding: "2px 8px", borderRadius: 14, cursor: "pointer" } }, a)))),
+            e.level && React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: "#fff", background: levelColor(e.level), borderRadius: 5, padding: "2px 6px", letterSpacing: ".04em" } }, e.level)),
+        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 7 } },
+            React.createElement("span", { style: { fontSize: 18.5, fontWeight: 600, color: C.ink } }, e.pl),
+            e.alts && e.alts.length > 0 && e.alts.map((a, i) => (React.createElement("button", { key: i, onClick: () => onPickAlt && onPickAlt(e.id, a), className: "lex-primary", title: "ustaw jako g\u0142\u00F3wne t\u0142umaczenie", style: { border: `1px solid ${C.line}`, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 12.5, padding: "2px 9px", borderRadius: 14, cursor: "pointer" } }, a)))),
+        e.definition && React.createElement("p", { style: { margin: "6px 0 0", fontSize: 13.5, color: C.inkSoft, lineHeight: 1.5, fontStyle: "italic" } }, e.definition),
         e.sentence && (React.createElement("div", { style: { marginTop: 14, borderLeft: `3px solid ${C.lime}`, paddingLeft: 14 } },
             React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } },
                 React.createElement("span", { style: { width: 7, height: 7, borderRadius: 7, background: e.fromBook ? C.lime : "#A7B190" } }),
@@ -536,7 +573,11 @@ function Entry({ e, onDelete, onPickAlt, onPickExample }) {
 function BookThumb({ book, w, sel }) {
     const width = w || 66;
     const height = Math.round(width * 1.42);
-    return (React.createElement("div", { className: "lex-book" + (sel ? " sel" : ""), style: { width: width, height: height, backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? "#e6e6df" : bookColor(book.title || "") } }, !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)));
+    const count = (book.entries && book.entries.length) || 0;
+    const thick = Math.max(3, Math.min(15, 3 + count * 0.7));
+    return (React.createElement("div", { className: "lex-book" + (sel ? " sel" : ""), style: { width: width, height: height, backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? "#e6e6df" : bookColor(book.title || "") } },
+        !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title),
+        React.createElement("div", { title: count + " słów", style: { position: "absolute", top: 3, bottom: 3, right: 0, width: thick, background: "repeating-linear-gradient(to right, rgba(255,255,255,.95), rgba(255,255,255,.95) 1px, rgba(176,183,150,.85) 1px, rgba(176,183,150,.85) 2px)", borderTopRightRadius: 4, borderBottomRightRadius: 4, boxShadow: "inset 1px 0 2px rgba(0,0,0,.18)" } })));
 }
 function fileToDataURL(file) { return new Promise(function (res, rej) { const r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = function () { rej(new Error("read")); }; r.readAsDataURL(file); }); }
 function loadImg(src) { return new Promise(function (res, rej) { const im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej(new Error("img")); }; im.src = src; }); }
@@ -609,12 +650,22 @@ function BookModal({ onClose, onSave, initial }) {
             const res = await olSearch(initial.title);
             if (!ok || !res.length)
                 return;
-            let list = await olCovers(res[0].workKey);
-            if ((!list || !list.length) && res[0].coverId)
-                list = [{ id: res[0].coverId, url: "https://covers.openlibrary.org/b/id/" + res[0].coverId + "-M.jpg" }];
-            if (!ok || !list || !list.length)
+            const acc = [];
+            const seen = {};
+            for (let i = 0; i < Math.min(3, res.length); i++) {
+                let list = await olCovers(res[i].workKey);
+                if ((!list || !list.length) && res[i].coverId)
+                    list = [{ id: res[i].coverId, url: "https://covers.openlibrary.org/b/id/" + res[i].coverId + "-M.jpg" }];
+                (list || []).forEach(c => { if (!seen[c.url]) {
+                    seen[c.url] = 1;
+                    acc.push(c);
+                } });
+                if (!ok)
+                    return;
+            }
+            if (!ok || !acc.length)
                 return;
-            setCovers(prev => { const have = {}; prev.forEach(c => { have[c.url] = 1; }); const merged = prev.slice(); list.forEach(c => { if (!have[c.url])
+            setCovers(prev => { const have = {}; prev.forEach(c => { have[c.url] = 1; }); const merged = prev.slice(); acc.forEach(c => { if (!have[c.url])
                 merged.push(c); }); return merged; });
         })();
         return () => { ok = false; };
@@ -738,6 +789,64 @@ function Flashcards({ book, onClose }) {
                 React.createElement("button", { onClick: () => setFlipped(f => !f), className: "lex-primary", style: { height: 56, padding: "0 22px", borderRadius: 16, border: "none", background: C.lime, color: C.ink, fontSize: 15, fontWeight: 800, cursor: "pointer" } }, "odwr\u00F3\u0107"),
                 React.createElement("button", { onClick: () => go(1), className: "lex-primary", style: { width: 56, height: 56, borderRadius: 16, border: "none", background: C.paperDeep, color: C.ink, fontSize: 24, cursor: "pointer" } }, "\u203A"))))));
 }
+function EntryEdit({ entry, onClose, onSave }) {
+    const [pl, setPl] = useState(entry.pl || "");
+    const [sentence, setSentence] = useState(entry.sentence || "");
+    const [note, setNote] = useState(entry.note || "");
+    const [definition, setDefinition] = useState(entry.definition || "");
+    const [defs, setDefs] = useState([]);
+    const [loadingDefs, setLoadingDefs] = useState(false);
+    const [saving, setSaving] = useState(false);
+    useEffect(function () { let ok = true; setLoadingDefs(true); fetchDict(entry.word).then(function (d) { if (!ok)
+        return; setDefs((d && d.defs) || []); setLoadingDefs(false); }).catch(function () { if (ok)
+        setLoadingDefs(false); }); return function () { ok = false; }; }, []);
+    const save = async function () {
+        setSaving(true);
+        let sentencePl = entry.sentencePl || "";
+        const st = sentence.trim();
+        if (st && st !== (entry.sentence || "").trim()) {
+            try {
+                sentencePl = await translate(st);
+            }
+            catch (e) { }
+        }
+        if (!st)
+            sentencePl = "";
+        onSave(entry.id, { pl: pl.trim() || entry.pl, sentence: st, sentencePl: sentencePl, note: note.trim(), definition: definition });
+    };
+    return (React.createElement("div", { className: "lex-modal-bg", onClick: onClose },
+        React.createElement("div", { className: "lex-modal", onClick: function (e) { e.stopPropagation(); }, style: { maxWidth: 460 } },
+            React.createElement("div", { className: "lex-modal-title" },
+                "edytuj \u201E",
+                entry.word,
+                "\""),
+            React.createElement("div", { style: { fontSize: 11, letterSpacing: ".1em", color: C.inkSoft, fontWeight: 700, marginBottom: 5 } }, "t\u0142umaczenie"),
+            React.createElement("input", { className: "lex-field", value: pl, onChange: function (e) { setPl(e.target.value); }, style: { fontSize: 16, fontWeight: 600, padding: "11px 13px" } }),
+            React.createElement("div", { style: { fontSize: 11, letterSpacing: ".1em", color: C.inkSoft, fontWeight: 700, margin: "12px 0 5px" } }, "przyk\u0142adowe zdanie"),
+            React.createElement("textarea", { className: "lex-field", value: sentence, onChange: function (e) { setSentence(e.target.value); }, style: { fontSize: 15, lineHeight: 1.5, padding: "11px 13px", minHeight: 84, resize: "vertical", fontStyle: sentence ? "italic" : "normal" } }),
+            React.createElement("div", { style: { fontSize: 11, letterSpacing: ".1em", color: C.inkSoft, fontWeight: 700, margin: "12px 0 5px" } }, "notatka"),
+            React.createElement("input", { className: "lex-field", value: note, onChange: function (e) { setNote(e.target.value); }, placeholder: "w\u0142asna notatka (opcjonalnie)", style: { fontSize: 14.5, padding: "10px 13px" } }),
+            React.createElement("div", { style: { fontSize: 11, letterSpacing: ".1em", color: C.inkSoft, fontWeight: 700, margin: "14px 0 6px" } },
+                "definicja s\u0142ownikowa ",
+                loadingDefs ? "— ładuję…" : ""),
+            React.createElement("div", { className: "lex-scroll", style: { maxHeight: 210, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 } },
+                definition && React.createElement("div", { style: { fontSize: 12.5, color: C.olive, fontWeight: 700 } },
+                    "wybrana: ",
+                    definition),
+                defs.map(function (d, i) {
+                    const on = definition === d.definition;
+                    return (React.createElement("button", { key: i, onClick: function () { setDefinition(on ? "" : d.definition); if (!on && !sentence.trim() && d.example)
+                            setSentence(d.example); }, style: { textAlign: "left", border: "1px solid " + (on ? C.lime : C.line), background: on ? "#F0F7DE" : "#fff", color: C.ink, fontSize: 13.5, lineHeight: 1.45, padding: "8px 10px", borderRadius: 9, cursor: "pointer" } },
+                        d.pos && React.createElement("span", { style: { color: C.olive, fontWeight: 700 } },
+                            d.pos,
+                            " \u00B7 "),
+                        d.definition));
+                }),
+                !loadingDefs && defs.length === 0 && React.createElement("div", { style: { fontSize: 12.5, color: C.inkSoft } }, "brak definicji w s\u0142owniku dla tego has\u0142a.")),
+            React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 16 } },
+                React.createElement("button", { onClick: save, disabled: saving, className: "lex-primary", style: { flex: 1, padding: "12px", borderRadius: 11, border: "none", background: C.lime, color: C.ink, fontSize: 15, fontWeight: 800, cursor: "pointer" } }, saving ? "zapisuję…" : "zapisz"),
+                React.createElement("button", { onClick: onClose, className: "lex-primary", style: { padding: "12px 16px", borderRadius: 11, border: "1px solid " + C.ink, background: "transparent", color: C.ink, fontSize: 15, fontWeight: 700, cursor: "pointer" } }, "anuluj")))));
+}
 function App() {
     const [books, setBooks] = useState([]);
     const [activeId, setActiveId] = useState(null);
@@ -754,6 +863,9 @@ function App() {
     const [editBook, setEditBook] = useState(null);
     const [showCardsAll, setShowCardsAll] = useState(false);
     const [delBook, setDelBook] = useState(null);
+    const [entryEdit, setEntryEdit] = useState(null);
+    const [revealId, setRevealId] = useState(null);
+    const [phraseSug, setPhraseSug] = useState([]);
     const [pool, setPool] = useState([]);
     const [entryMode, setEntryMode] = useState("recent");
     const [azLetter, setAzLetter] = useState("");
@@ -765,6 +877,8 @@ function App() {
     const pushT = useRef(null);
     const booksRef = useRef([]);
     const poolRef = useRef([]);
+    const pressRef = useRef(null);
+    const longRef = useRef(false);
     const syncBusy = syncState === "łączę…" || syncState === "zapisuję…";
     const syncErr = syncState === "błąd synchronizacji" || syncState === "błąd zapisu";
     const syncOff = syncState === "tylko to urządzenie";
@@ -837,6 +951,17 @@ function App() {
     useEffect(() => {
         const w = word.trim().toLowerCase();
         if (w.length < 3 || w.indexOf(" ") >= 0) {
+            setPhraseSug([]);
+            return;
+        }
+        let cancel = false;
+        const t = setTimeout(async () => { const p = await wiktionaryPhrases(w); if (!cancel)
+            setPhraseSug(p); }, 650);
+        return () => { cancel = true; clearTimeout(t); };
+    }, [word]);
+    useEffect(() => {
+        const w = word.trim().toLowerCase();
+        if (w.length < 3 || w.indexOf(" ") >= 0) {
             setSug([]);
             return;
         }
@@ -867,7 +992,23 @@ function App() {
         setDelBook(b); };
     const doDelete = (book, mode) => { const remaining = books.filter(b => b.id !== book.id); const nextPool = mode === "pool" ? poolRef.current.concat((book.entries || []).map(e => ({ ...e, source: book.title }))) : poolRef.current; commit(remaining, nextPool); if (activeId === book.id)
         setActiveId(remaining[0] ? remaining[0].id : null); setDelBook(null); };
-    const selectBook = (id) => { setActiveId(id); setSidebarOpen(false); setQuery(""); };
+    const selectBook = (id) => { setActiveId(id); setSidebarOpen(false); setQuery(""); setRevealId(null); };
+    const updateEntry = (eid, patch) => { setAndPersist(prev => prev.map(b => b.id === activeId ? { ...b, touchedAt: Date.now(), entries: b.entries.map(e => e.id === eid ? { ...e, ...patch } : e) } : b)); setEntryEdit(null); };
+    const startPress = (id) => { longRef.current = false; if (pressRef.current)
+        clearTimeout(pressRef.current); pressRef.current = setTimeout(() => { longRef.current = true; setRevealId(id); }, 480); };
+    const endPress = () => { if (pressRef.current) {
+        clearTimeout(pressRef.current);
+        pressRef.current = null;
+    } };
+    const cellClick = (id) => { if (longRef.current) {
+        longRef.current = false;
+        return;
+    } if (revealId === id) {
+        setRevealId(null);
+    }
+    else {
+        selectBook(id);
+    } };
     const updateBook = (id, data) => { setAndPersist(prev => prev.map(b => b.id === id ? { ...b, title: data.title, author: data.author || "", cover: data.cover || "", touchedAt: Date.now() } : b)); };
     const pickAlt = (eid, newPl) => { setAndPersist(prev => prev.map(b => b.id === activeId ? { ...b, touchedAt: Date.now(), entries: b.entries.map(e => { if (e.id !== eid)
             return e; const cand = [e.pl].concat(e.alts || []).filter(a => a && a.toLowerCase() !== newPl.toLowerCase()); const uniq = []; const seen = {}; for (const o of cand) {
@@ -947,34 +1088,39 @@ function App() {
                 React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9 } },
                     React.createElement("div", { style: { fontSize: 30, fontWeight: 900, letterSpacing: "-.04em", lineHeight: 1 } }, "czytelnia"),
                     React.createElement("span", { className: "lex-spark" + (syncBusy ? " sync" : ""), title: syncTitle, style: { fontSize: 19, lineHeight: 1, opacity: syncOff ? 0.4 : 1 } }, syncGlyph))),
-            totalCards > 0 && (React.createElement("div", { style: { padding: "0 20px 12px" } },
-                React.createElement("button", { onClick: () => { setShowCardsAll(true); setSidebarOpen(false); }, className: "lex-primary", style: { width: "100%", border: "none", background: C.ink, color: "#fff", fontWeight: 800, fontSize: 13, padding: "10px", borderRadius: 11, cursor: "pointer" } },
-                    "\uD83C\uDFB4 fiszki ze wszystkich (",
-                    totalCards,
-                    ")"))),
             React.createElement("div", { style: { padding: "4px 12px 16px", flex: 1 } },
                 React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } },
                     books.slice().sort((a, b) => (b.touchedAt || 0) - (a.touchedAt || 0)).map(b => (React.createElement("div", { key: b.id, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
                         React.createElement("div", { style: { position: "relative" } },
-                            React.createElement("div", { onClick: () => selectBook(b.id) },
+                            React.createElement("div", { onClick: () => cellClick(b.id), onPointerDown: () => startPress(b.id), onPointerUp: endPress, onPointerLeave: endPress, onPointerCancel: endPress, onContextMenu: (e) => { e.preventDefault(); setRevealId(b.id); }, style: { touchAction: "manipulation" } },
                                 React.createElement(BookThumb, { book: b, sel: b.id === activeId })),
-                            b.id === activeId && React.createElement("button", { className: "lex-book-x", style: { display: "flex" }, onClick: () => deleteBook(b.id), "aria-label": "usu\u0144 ksi\u0105\u017Ck\u0119" }, "\u00D7"),
-                            b.id === activeId && React.createElement("button", { className: "lex-book-edit", onClick: () => setEditBook(b), "aria-label": "edytuj ksi\u0105\u017Ck\u0119" }, "\u270E")),
+                            revealId === b.id && React.createElement("button", { className: "lex-book-x", style: { display: "flex" }, onClick: (e) => { e.stopPropagation(); setRevealId(null); deleteBook(b.id); }, "aria-label": "usu\u0144 ksi\u0105\u017Ck\u0119" }, "\u00D7"),
+                            revealId === b.id && React.createElement("button", { className: "lex-book-edit", onClick: (e) => { e.stopPropagation(); setRevealId(null); setEditBook(b); }, "aria-label": "edytuj ksi\u0105\u017Ck\u0119" }, "\u270E")),
                         React.createElement("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.shelfText, textAlign: "center", lineHeight: 1.25, wordBreak: "break-word", width: "100%" } }, b.title)))),
                     React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
                         React.createElement("button", { className: "lex-addtile", onClick: () => setShowAdd(true), style: { width: 66, height: 94 } }, "+"),
                         React.createElement("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.shelfMute } }, "dodaj"))),
-                loaded && books.length === 0 && React.createElement("div", { style: { padding: "14px 4px", fontSize: 13, color: C.shelfMute, lineHeight: 1.5, fontWeight: 600 } }, "brak ksi\u0105\u017Cek. dodaj pierwsz\u0105, \u017Ceby zacz\u0105\u0107 zbiera\u0107 s\u0142owa."))),
+                loaded && books.length === 0 && React.createElement("div", { style: { padding: "14px 4px", fontSize: 13, color: C.shelfMute, lineHeight: 1.5, fontWeight: 600 } }, "brak ksi\u0105\u017Cek. dodaj pierwsz\u0105, \u017Ceby zacz\u0105\u0107 zbiera\u0107 s\u0142owa.")),
+            totalCards > 0 && (React.createElement("div", { style: { padding: "14px 16px", borderTop: `1px solid ${C.shelfSoft}` } },
+                React.createElement("div", { style: { fontSize: 11, letterSpacing: ".16em", color: C.shelfMute, fontWeight: 800, marginBottom: 8 } }, "FISZKI"),
+                React.createElement("button", { onClick: () => { setShowCardsAll(true); setSidebarOpen(false); }, className: "lex-primary", style: { width: "100%", border: "none", background: C.ink, color: "#fff", fontWeight: 800, fontSize: 13, padding: "11px", borderRadius: 11, cursor: "pointer" } },
+                    "\uD83C\uDFB4 ze wszystkich ksi\u0105\u017Cek (",
+                    totalCards,
+                    ")")))),
         React.createElement("main", { style: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 } },
             React.createElement("header", { style: { display: "flex", alignItems: "center", gap: 12, padding: "14px 20px", borderBottom: `1px solid ${C.line}`, background: C.paper } },
                 React.createElement("button", { onClick: () => setSidebarOpen(true), "aria-label": "poka\u017C ksi\u0105\u017Cki", className: "lex-icon-btn lex-menu", style: { border: "none", background: "transparent", color: C.ink, fontSize: 20, padding: 4, alignItems: "center" } }, "\u2630"),
-                React.createElement("div", { style: { flex: 1, minWidth: 0 } }, activeBook ? (React.createElement(React.Fragment, null,
-                    React.createElement("h1", { style: { margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: "-.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, activeBook.title),
-                    React.createElement("div", { style: { fontSize: 12, color: C.inkSoft, marginTop: 2, fontWeight: 600 } },
-                        activeBook.author ? activeBook.author + " · " : "",
-                        entries.length,
-                        " ",
-                        countLabel(entries.length)))) : React.createElement("h1", { style: { margin: 0, fontSize: 22, fontWeight: 900, letterSpacing: "-.03em" } }, "czytelnia")),
+                React.createElement("div", { style: { flex: 1, minWidth: 0 } }, activeBook ? (React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 11, minWidth: 0 } },
+                    activeBook.cover
+                        ? React.createElement("img", { src: activeBook.cover, alt: "", style: { width: 34, height: 48, objectFit: "cover", borderRadius: 3, flexShrink: 0, boxShadow: "1px 1px 4px rgba(0,0,0,.25)" } })
+                        : React.createElement("div", { style: { width: 34, height: 48, borderRadius: 3, flexShrink: 0, background: bookColor(activeBook.title || "") } }),
+                    React.createElement("div", { style: { minWidth: 0 } },
+                        React.createElement("h1", { style: { margin: 0, fontSize: 21, fontWeight: 800, letterSpacing: "-.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, activeBook.title),
+                        React.createElement("div", { style: { fontSize: 12, color: C.inkSoft, marginTop: 2, fontWeight: 600 } },
+                            activeBook.author ? activeBook.author + " · " : "",
+                            entries.length,
+                            " ",
+                            countLabel(entries.length))))) : React.createElement("h1", { style: { margin: 0, fontSize: 22, fontWeight: 900, letterSpacing: "-.03em" } }, "czytelnia")),
                 activeBook && entries.length > 0 && (React.createElement(React.Fragment, null,
                     React.createElement("button", { onClick: () => { setEntryMode(m => m === "az" ? "recent" : "az"); setAzLetter(""); }, className: "lex-primary", title: "kolejno\u015B\u0107 listy", style: { border: "none", background: C.paperDeep, color: C.ink, fontWeight: 800, fontSize: 12.5, padding: "8px 11px", borderRadius: 10, cursor: "pointer", whiteSpace: "nowrap" } }, entryMode === "az" ? "ostatnie" : "a–z"),
                     React.createElement("button", { onClick: () => setShowCards(true), className: "lex-primary", style: { border: "none", background: C.lime, color: C.ink, fontWeight: 800, fontSize: 13, padding: "8px 13px", borderRadius: 10, cursor: "pointer", whiteSpace: "nowrap" } }, "fiszki"),
@@ -987,7 +1133,7 @@ function App() {
             React.createElement("div", { ref: scrollRef, className: "lex-scroll", style: { flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 24px" } }, !activeBook ? React.createElement(Empty, { kind: "nobook", onAdd: () => setShowAdd(true) })
                 : view.length === 0 ? React.createElement(Empty, { kind: query ? "nofind" : (azLetter ? "nofind" : "nowords") })
                     : (React.createElement("div", { style: { maxWidth: 680, margin: "0 auto" } },
-                        view.map(e => React.createElement(Entry, { key: e.id, e: e, onDelete: deleteEntry, onPickAlt: pickAlt, onPickExample: pickExample })),
+                        view.map(e => React.createElement(Entry, { key: e.id, e: e, onDelete: deleteEntry, onEdit: setEntryEdit, onPickAlt: pickAlt, onPickExample: pickExample })),
                         busy && React.createElement("div", { style: { padding: "22px 2px", color: C.inkSoft } },
                             React.createElement("span", { style: { fontStyle: "italic", fontSize: 17 } }, "t\u0142umacz\u0119"),
                             React.createElement("span", { className: "lex-dots", style: { marginLeft: 2 } },
@@ -1002,6 +1148,9 @@ function App() {
                     sug.length > 0 && (React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 7, marginTop: 8 } },
                         React.createElement("span", { style: { fontSize: 12.5, color: C.inkSoft, fontWeight: 600 } }, "czy chodzi\u0142o ci o:"),
                         sug.map((s, i) => (React.createElement("button", { key: i, onClick: () => { setWord(s); setSug([]); wordRef.current && wordRef.current.focus(); }, className: "lex-primary", style: { border: `1px solid ${C.limeDeep}`, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 13, padding: "4px 10px", borderRadius: 20, cursor: "pointer" } }, s))))),
+                    phraseSug.length > 0 && (React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 7, marginTop: 8 } },
+                        React.createElement("span", { style: { fontSize: 12.5, color: C.inkSoft, fontWeight: 600 } }, "zwi\u0105zki z tym s\u0142owem:"),
+                        phraseSug.map((p, i) => (React.createElement("button", { key: i, onClick: () => { setWord(p); setPhraseSug([]); setSug([]); }, className: "lex-primary", title: "dodaj jako wyra\u017Cenie", style: { border: `1px solid ${C.limeDeep}`, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 12.5, padding: "3px 9px", borderRadius: 16, cursor: "pointer" } }, p))))),
                     word.trim().indexOf(" ") >= 0 && (React.createElement("div", { style: { marginTop: 8, fontSize: 12.5, color: C.olive, fontWeight: 700 } },
                         "\u270E dodam jako ",
                         phraseKind(word.trim()) || "wyrażenie",
@@ -1017,6 +1166,7 @@ function App() {
         editBook && React.createElement(BookModal, { initial: editBook, onClose: () => setEditBook(null), onSave: (data) => { updateBook(editBook.id, data); setEditBook(null); } }),
         showCards && activeBook && React.createElement(Flashcards, { book: activeBook, onClose: () => setShowCards(false) }),
         showCardsAll && React.createElement(Flashcards, { book: { title: "wszystkie książki", entries: allCards }, onClose: () => setShowCardsAll(false) }),
+        entryEdit && React.createElement(EntryEdit, { entry: entryEdit, onClose: () => setEntryEdit(null), onSave: updateEntry }),
         delBook && (React.createElement("div", { className: "lex-modal-bg", onClick: () => setDelBook(null) },
             React.createElement("div", { className: "lex-modal", onClick: (e) => e.stopPropagation(), style: { maxWidth: 400 } },
                 React.createElement("div", { className: "lex-modal-title" },
