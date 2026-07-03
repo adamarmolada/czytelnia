@@ -59,6 +59,7 @@ const LEX_CSS = `
 .lex-book.sel{box-shadow:0 0 0 3px ${C.lime},2px 4px 10px rgba(11,11,10,.3);}
 .lex-book-title{position:absolute;inset:0;padding:8px 8px 8px 11px;color:#fff;font-size:11px;font-weight:800;line-height:1.22;overflow:hidden;text-shadow:0 1px 3px rgba(0,0,0,.6);background:linear-gradient(160deg,rgba(0,0,0,.15),rgba(0,0,0,.45));}
 .lex-book-x{position:absolute;top:-7px;right:-7px;width:22px;height:22px;border-radius:50%;border:2px solid ${C.shelf};background:${C.ink};color:#fff;font-size:13px;line-height:1;cursor:pointer;align-items:center;justify-content:center;}
+.lex-book-edit{position:absolute;top:-7px;left:-7px;width:22px;height:22px;border-radius:50%;border:2px solid ${C.shelf};background:${C.ink};color:#fff;font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 .lex-addtile{border:2px dashed ${C.ink};background:transparent;color:${C.ink};border-radius:4px;cursor:pointer;font-size:26px;font-weight:800;display:flex;align-items:center;justify-content:center;transition:background .12s ease;}
 .lex-addtile:hover{background:rgba(0,0,0,.06);}
 .lex-modal-bg{position:fixed;inset:0;background:#0009;z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;}
@@ -151,6 +152,84 @@ async function translate(text) {
         return await viaGoogle(text);
     }
 }
+async function translateDetailed(text) {
+    try {
+        const r = await fetch("https://api.mymemory.translated.net/get?q=" + encodeURIComponent(text) + "&langpair=en|pl");
+        if (!r.ok)
+            throw new Error("mm");
+        const d = await r.json();
+        let best = (d && d.responseData && d.responseData.translatedText) ? decodeHtml(String(d.responseData.translatedText).trim()) : "";
+        if (/MYMEMORY WARNING|INVALID|PLEASE SELECT/i.test(best))
+            best = "";
+        const alts = [];
+        const seen = {};
+        if (best)
+            seen[best.toLowerCase()] = 1;
+        if (Array.isArray(d.matches)) {
+            const ms = d.matches.slice().sort((a, b) => (parseFloat(b.quality || "0")) - (parseFloat(a.quality || "0")));
+            for (const m of ms) {
+                let t = (m && m.translation) ? decodeHtml(String(m.translation).trim()) : "";
+                if (!t || t.split(/\s+/).length > 3)
+                    continue;
+                const lc = t.toLowerCase();
+                if (seen[lc])
+                    continue;
+                seen[lc] = 1;
+                alts.push(t);
+                if (alts.length >= 6)
+                    break;
+            }
+        }
+        if (!best) {
+            if (alts.length)
+                best = alts.shift();
+            else
+                throw new Error("empty");
+        }
+        return { best, alts };
+    }
+    catch (e) {
+        const g = await viaGoogle(text);
+        return { best: g, alts: [] };
+    }
+}
+function cefrFromFreq(f) {
+    if (!f || f <= 0)
+        return "";
+    if (f >= 500)
+        return "A1";
+    if (f >= 100)
+        return "A2";
+    if (f >= 25)
+        return "B1";
+    if (f >= 7)
+        return "B2";
+    if (f >= 1.5)
+        return "C1";
+    return "C2";
+}
+async function wordInfo(word) {
+    try {
+        const w = word.toLowerCase().trim();
+        const r = await fetch("https://api.datamuse.com/words?max=1&md=f&sp=" + encodeURIComponent(w));
+        if (!r.ok)
+            return { exists: false, freq: 0, level: "" };
+        const d = await r.json();
+        const top = d && d[0];
+        if (!top || String(top.word).toLowerCase() !== w)
+            return { exists: false, freq: 0, level: "" };
+        let freq = 0;
+        if (Array.isArray(top.tags)) {
+            const f = top.tags.find(t => String(t).indexOf("f:") === 0);
+            if (f)
+                freq = parseFloat(String(f).slice(2)) || 0;
+        }
+        return { exists: true, freq, level: cefrFromFreq(freq) };
+    }
+    catch {
+        return { exists: false, freq: 0, level: "" };
+    }
+}
 const POS_PL = { noun: "rzeczownik", verb: "czasownik", adjective: "przymiotnik", adverb: "przysłówek", pronoun: "zaimek", preposition: "przyimek", conjunction: "spójnik", interjection: "wykrzyknik", exclamation: "wykrzyknik", determiner: "określnik", article: "przedimek", numeral: "liczebnik" };
 async function fetchDict(word) {
     try {
@@ -195,7 +274,7 @@ async function fetchDict(word) {
 async function lookupWord({ word, sentence }) {
     const hasSentence = sentence && sentence.trim().length > 0;
     const clean = word.trim();
-    const [dict, pl] = await Promise.all([fetchDict(clean), translate(clean)]);
+    const [dict, detail, info] = await Promise.all([fetchDict(clean), translateDetailed(clean), wordInfo(clean)]);
     const src = hasSentence ? sentence.trim() : (dict.example || "");
     let sentencePl = "";
     if (src) {
@@ -206,7 +285,19 @@ async function lookupWord({ word, sentence }) {
             sentencePl = "";
         }
     }
-    return { id: uid(), word: clean, queried: clean, ipa: dict.ipa || "", pos: dict.pos ? (POS_PL[dict.pos] || dict.pos) : "", pl: pl, note: "", sentence: src, sentencePl, audio: dict.audio || "", fromBook: !!hasSentence, createdAt: Date.now() };
+    let pl = detail.best;
+    let alts = detail.alts.slice();
+    if (hasSentence && sentencePl) {
+        const low = sentencePl.toLowerCase();
+        const cand = [detail.best].concat(detail.alts);
+        const hit = cand.find(c => { const stem = c.toLowerCase().split(/\s+/)[0].slice(0, 5); return stem.length >= 3 && low.indexOf(stem) >= 0; });
+        if (hit && hit.toLowerCase() !== pl.toLowerCase()) {
+            pl = hit;
+            alts = cand.filter(c => c !== hit);
+        }
+    }
+    alts = alts.filter(a => a.toLowerCase() !== pl.toLowerCase()).slice(0, 4);
+    return { id: uid(), word: clean, queried: clean, ipa: dict.ipa || "", pos: dict.pos ? (POS_PL[dict.pos] || dict.pos) : "", pl: pl, alts: alts, level: info.level || "", note: "", sentence: src, sentencePl, audio: dict.audio || "", fromBook: !!hasSentence, createdAt: Date.now() };
 }
 async function olSearch(q) {
     try {
@@ -316,6 +407,7 @@ function playPronunciation(entry, setSt) {
     speakBrowser(entry.word);
     setTimeout(done, 1100);
 }
+function levelColor(l) { const c = { A1: "#3E7D00", A2: "#3E7D00", B1: "#B8791B", B2: "#B8791B", C1: "#7B2D26", C2: "#7B2D26" }; return c[l] || "#56604A"; }
 function bookColor(s) {
     const pal = ["#1F6F6B", "#B8791B", "#3E5400", "#26333E", "#6FA800", "#7B2D26", "#2B3A55", "#0B0B0A"];
     let h = 0;
@@ -349,16 +441,20 @@ function SpeakerBtn({ entry, size }) {
             React.createElement("path", { d: "M16.5 8.5a5 5 0 0 1 0 7" }),
             React.createElement("path", { d: "M19.5 6a8 8 0 0 1 0 12" }))));
 }
-function Entry({ e, onDelete }) {
+function Entry({ e, onDelete, onPickAlt }) {
     return (React.createElement("article", { className: "lex-entry", style: { padding: "22px 2px", borderBottom: `1px solid ${C.line}` } },
         React.createElement("div", { style: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10 } },
             React.createElement("h3", { style: { margin: 0, fontSize: 26, fontWeight: 700, letterSpacing: "-.02em" } }, e.word),
             e.ipa && React.createElement("span", { style: { fontSize: 13.5, color: C.inkSoft } }, e.ipa),
             e.pos && React.createElement("span", { style: { fontSize: 14, color: C.olive, fontWeight: 700 } }, e.pos.toLowerCase()),
+            e.level && React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: "#fff", background: levelColor(e.level), borderRadius: 5, padding: "2px 6px", letterSpacing: ".04em" } }, e.level),
             React.createElement("div", { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 } },
                 React.createElement(SpeakerBtn, { entry: e }),
                 React.createElement("button", { onClick: () => onDelete(e.id), "aria-label": "usu\u0144 has\u0142o", className: "lex-icon-btn", style: { border: "none", background: "transparent", color: C.inkSoft, opacity: .45, fontSize: 13, padding: 4, cursor: "pointer" } }, "usu\u0144"))),
         React.createElement("p", { style: { margin: "6px 0 0", fontSize: 21, fontWeight: 500, color: C.ink } }, e.pl),
+        e.alts && e.alts.length > 0 && (React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 6 } },
+            React.createElement("span", { style: { fontSize: 12, color: C.inkSoft, fontWeight: 600 } }, "inne znaczenia:"),
+            e.alts.map((a, i) => (React.createElement("button", { key: i, onClick: () => onPickAlt && onPickAlt(e.id, a), className: "lex-primary", title: "ustaw jako g\u0142\u00F3wne t\u0142umaczenie", style: { border: `1px solid ${C.line}`, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 12.5, padding: "3px 9px", borderRadius: 16, cursor: "pointer" } }, a))))),
         e.note && React.createElement("p", { style: { margin: "4px 0 0", fontSize: 13.5, color: C.inkSoft, lineHeight: 1.5 } }, e.note),
         e.sentence && (React.createElement("div", { style: { marginTop: 14, borderLeft: `3px solid ${C.lime}`, paddingLeft: 14 } },
             React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } },
@@ -373,15 +469,15 @@ function BookThumb({ book, w, sel }) {
     const height = Math.round(width * 1.42);
     return (React.createElement("div", { className: "lex-book" + (sel ? " sel" : ""), style: { width: width, height: height, backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? "#e6e6df" : bookColor(book.title || "") } }, !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)));
 }
-function AddBookModal({ onClose, onAdd }) {
-    const [title, setTitle] = useState("");
-    const [author, setAuthor] = useState("");
+function BookModal({ onClose, onSave, initial }) {
+    const [title, setTitle] = useState(initial ? initial.title : "");
+    const [author, setAuthor] = useState(initial ? (initial.author || "") : "");
     const [sugs, setSugs] = useState([]);
     const [searching, setSearching] = useState(false);
-    const [covers, setCovers] = useState([]);
-    const [cover, setCover] = useState("");
+    const [covers, setCovers] = useState(initial && initial.cover ? [{ id: 0, url: initial.cover }] : []);
+    const [cover, setCover] = useState(initial ? (initial.cover || "") : "");
     const [loadingCovers, setLoadingCovers] = useState(false);
-    const [picked, setPicked] = useState(false);
+    const [picked, setPicked] = useState(!!initial);
     const tRef = useRef(null);
     useEffect(() => {
         const q = title.trim();
@@ -412,10 +508,10 @@ function AddBookModal({ onClose, onAdd }) {
         setLoadingCovers(false);
     };
     const submit = () => { const t = title.trim(); if (!t)
-        return; onAdd({ title: t, author: author.trim(), cover: cover || "" }); };
+        return; onSave({ title: t, author: author.trim(), cover: cover || "" }); };
     return (React.createElement("div", { className: "lex-modal-bg", onClick: onClose },
         React.createElement("div", { className: "lex-modal", onClick: (e) => e.stopPropagation() },
-            React.createElement("div", { className: "lex-modal-title" }, "nowa ksi\u0105\u017Cka"),
+            React.createElement("div", { className: "lex-modal-title" }, initial ? "edytuj książkę" : "nowa książka"),
             React.createElement("input", { className: "lex-field", autoFocus: true, value: title, onChange: (e) => { setPicked(false); setTitle(e.target.value); }, placeholder: "tytu\u0142 \u2014 zacznij pisa\u0107, podpowiem", style: { fontSize: 16, fontWeight: 700, padding: "12px 13px" } }),
             searching && React.createElement("div", { style: { fontSize: 12, color: C.inkSoft, marginTop: 6, fontWeight: 600 } }, "szukam\u2026"),
             sugs.length > 0 && (React.createElement("div", { className: "lex-sug" }, sugs.map((s, i) => (React.createElement("div", { key: i, className: "lex-sug-item", onClick: () => pick(s) },
@@ -433,7 +529,7 @@ function AddBookModal({ onClose, onAdd }) {
                     covers.map((c, i) => (React.createElement("div", { key: i, onClick: () => setCover(c.url), className: "lex-cover-opt" + (cover === c.url ? " sel" : ""), style: { backgroundImage: `url(${c.url})` } }))),
                     React.createElement("div", { onClick: () => setCover(""), className: "lex-cover-opt none" + (cover === "" ? " sel" : "") }, "bez")))),
             React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 16 } },
-                React.createElement("button", { onClick: submit, disabled: !title.trim(), className: "lex-primary", style: { flex: 1, padding: "12px", borderRadius: 11, border: "none", background: C.lime, color: C.ink, fontSize: 15, fontWeight: 800, cursor: "pointer" } }, "dodaj"),
+                React.createElement("button", { onClick: submit, disabled: !title.trim(), className: "lex-primary", style: { flex: 1, padding: "12px", borderRadius: 11, border: "none", background: C.lime, color: C.ink, fontSize: 15, fontWeight: 800, cursor: "pointer" } }, initial ? "zapisz" : "dodaj"),
                 React.createElement("button", { onClick: onClose, className: "lex-primary", style: { padding: "12px 16px", borderRadius: 11, border: `1px solid ${C.ink}`, background: "transparent", color: C.ink, fontSize: 15, fontWeight: 700, cursor: "pointer" } }, "anuluj")))));
 }
 function Flashcards({ book, onClose }) {
@@ -470,6 +566,9 @@ function Flashcards({ book, onClose }) {
                         React.createElement("div", { className: "lex-face front" },
                             React.createElement("div", { style: { fontSize: 34, fontWeight: 800, letterSpacing: "-.02em" } }, e.word),
                             e.ipa && React.createElement("div", { style: { fontSize: 15, color: C.inkSoft, marginTop: 6 } }, e.ipa),
+                            e.level && React.createElement("div", { style: { marginTop: 10, fontSize: 12, fontWeight: 800, color: "#fff", background: levelColor(e.level), borderRadius: 6, padding: "2px 10px" } },
+                                "poziom ",
+                                e.level),
                             React.createElement("div", { style: { marginTop: 16 } },
                                 React.createElement(SpeakerBtn, { entry: e, size: 44 })),
                             React.createElement("div", { style: { position: "absolute", bottom: 18, fontSize: 12, color: C.inkSoft, fontWeight: 600 } }, "dotknij, aby odwr\u00F3ci\u0107")),
@@ -496,6 +595,7 @@ function App() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [showAdd, setShowAdd] = useState(false);
     const [showCards, setShowCards] = useState(false);
+    const [editBook, setEditBook] = useState(null);
     const [query, setQuery] = useState("");
     const scrollRef = useRef(null);
     const wordRef = useRef(null);
@@ -560,20 +660,23 @@ function App() {
         el.scrollTop = el.scrollHeight; }, [entries.length, busy, activeId]);
     useEffect(() => {
         const w = word.trim().toLowerCase();
-        if (w.length < 3) {
+        if (w.length < 3 || w.indexOf(" ") >= 0) {
             setSug([]);
             return;
         }
         let cancel = false;
         const t = setTimeout(async () => {
-            const s = await suggestWord(w);
+            const info = await wordInfo(w);
             if (cancel)
                 return;
-            const lc = s.map(x => x.toLowerCase());
-            if (!lc.length || lc[0] === w || lc.indexOf(w) >= 0)
+            if (info.exists) {
                 setSug([]);
-            else
-                setSug(s.slice(0, 4));
+                return;
+            }
+            const su = await suggestWord(w);
+            if (cancel)
+                return;
+            setSug(su.filter(x => x.toLowerCase() !== w).slice(0, 4));
         }, 480);
         return () => { cancel = true; clearTimeout(t); };
     }, [word]);
@@ -588,6 +691,15 @@ function App() {
         return; const remaining = books.filter(b => b.id !== id); setAndPersist(remaining); if (activeId === id)
         setActiveId(remaining[0] ? remaining[0].id : null); };
     const selectBook = (id) => { setActiveId(id); setSidebarOpen(false); setQuery(""); };
+    const updateBook = (id, data) => { setAndPersist(prev => prev.map(b => b.id === id ? { ...b, title: data.title, author: data.author || "", cover: data.cover || "" } : b)); };
+    const pickAlt = (eid, newPl) => { setAndPersist(prev => prev.map(b => b.id === activeId ? { ...b, entries: b.entries.map(e => { if (e.id !== eid)
+            return e; const pool = [e.pl].concat(e.alts || []).filter(a => a && a.toLowerCase() !== newPl.toLowerCase()); const uniq = []; const seen = {}; for (const o of pool) {
+            const k = o.toLowerCase();
+            if (!seen[k]) {
+                seen[k] = 1;
+                uniq.push(o);
+            }
+        } return { ...e, pl: newPl, alts: uniq.slice(0, 4) }; }) } : b)); };
     const submit = async () => {
         const w = word.trim();
         if (!w || !activeId || busy)
@@ -623,7 +735,6 @@ function App() {
         React.createElement("aside", { className: "lex-aside lex-shelf-scroll" + (sidebarOpen ? " open" : ""), style: { width: 280, flexShrink: 0, background: C.shelf, color: C.shelfText, display: "flex", flexDirection: "column", overflowY: "auto", zIndex: 40 } },
             React.createElement("div", { style: { padding: "22px 20px 12px" } },
                 React.createElement("div", { style: { fontSize: 30, fontWeight: 900, letterSpacing: "-.04em", lineHeight: 1 } }, "czytelnia"),
-                React.createElement("div", { style: { fontSize: 12, color: C.shelfMute, marginTop: 4, fontWeight: 700 } }, "tw\u00F3j s\u0142ownik czytelnika"),
                 React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginTop: 9, fontSize: 11, color: C.shelfMute, fontWeight: 700 } },
                     React.createElement("span", { style: { width: 7, height: 7, borderRadius: 7, background: syncDot } }),
                     " ",
@@ -634,7 +745,8 @@ function App() {
                         React.createElement("div", { style: { position: "relative" } },
                             React.createElement("div", { onClick: () => selectBook(b.id) },
                                 React.createElement(BookThumb, { book: b, sel: b.id === activeId })),
-                            b.id === activeId && React.createElement("button", { className: "lex-book-x", style: { display: "flex" }, onClick: () => deleteBook(b.id), "aria-label": "usu\u0144 ksi\u0105\u017Ck\u0119" }, "\u00D7")),
+                            b.id === activeId && React.createElement("button", { className: "lex-book-x", style: { display: "flex" }, onClick: () => deleteBook(b.id), "aria-label": "usu\u0144 ksi\u0105\u017Ck\u0119" }, "\u00D7"),
+                            b.id === activeId && React.createElement("button", { className: "lex-book-edit", onClick: () => setEditBook(b), "aria-label": "edytuj ksi\u0105\u017Ck\u0119" }, "\u270E")),
                         React.createElement("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.shelfText, textAlign: "center", lineHeight: 1.25, wordBreak: "break-word", width: "100%" } }, b.title)))),
                     React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
                         React.createElement("button", { className: "lex-addtile", onClick: () => setShowAdd(true), style: { width: 66, height: 94 } }, "+"),
@@ -656,7 +768,7 @@ function App() {
             React.createElement("div", { ref: scrollRef, className: "lex-scroll", style: { flex: 1, overflowY: "auto", padding: "8px 24px" } }, !activeBook ? React.createElement(Empty, { kind: "nobook", onAdd: () => setShowAdd(true) })
                 : filtered.length === 0 ? React.createElement(Empty, { kind: query ? "nofind" : "nowords" })
                     : (React.createElement("div", { style: { maxWidth: 680, margin: "0 auto" } },
-                        filtered.map(e => React.createElement(Entry, { key: e.id, e: e, onDelete: deleteEntry })),
+                        filtered.map(e => React.createElement(Entry, { key: e.id, e: e, onDelete: deleteEntry, onPickAlt: pickAlt })),
                         busy && React.createElement("div", { style: { padding: "22px 2px", color: C.inkSoft } },
                             React.createElement("span", { style: { fontStyle: "italic", fontSize: 17 } }, "t\u0142umacz\u0119"),
                             React.createElement("span", { className: "lex-dots", style: { marginLeft: 2 } },
@@ -675,7 +787,8 @@ function App() {
                     React.createElement("button", { onClick: submit, disabled: !word.trim() || busy, className: "lex-send", style: { width: "100%", height: 52, marginTop: 12, borderRadius: 14, border: "none", background: C.lime, color: C.ink, fontSize: 16.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 } }, busy ? "tłumaczę…" : React.createElement(React.Fragment, null,
                         "t\u0142umacz ",
                         React.createElement("span", { style: { fontSize: 19, lineHeight: 1, marginTop: -1 } }, "\u2192"))))))),
-        showAdd && React.createElement(AddBookModal, { onClose: () => setShowAdd(false), onAdd: addBook }),
+        showAdd && React.createElement(BookModal, { onClose: () => setShowAdd(false), onSave: addBook }),
+        editBook && React.createElement(BookModal, { initial: editBook, onClose: () => setEditBook(null), onSave: (data) => { updateBook(editBook.id, data); setEditBook(null); } }),
         showCards && activeBook && React.createElement(Flashcards, { book: activeBook, onClose: () => setShowCards(false) })));
 }
 function Empty({ kind, onAdd }) {
