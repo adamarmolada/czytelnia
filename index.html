@@ -109,6 +109,19 @@ function saveLocal(lib) { try {
     localStorage.setItem(LKEY, JSON.stringify(lib));
 }
 catch { } }
+const CKEY = "czytelnia:covers";
+function loadCovers() { try {
+    const v = localStorage.getItem(CKEY);
+    const a = v ? JSON.parse(v) : [];
+    return Array.isArray(a) ? a : [];
+}
+catch {
+    return [];
+} }
+function saveCovers(a) { try {
+    localStorage.setItem(CKEY, JSON.stringify((a || []).slice(0, 40)));
+}
+catch { } }
 function cambridgeUrl(w) { return "https://dictionary.cambridge.org/dictionary/english/" + encodeURIComponent(String(w || "").trim().toLowerCase().replace(/\s+/g, "-")); }
 function normEntry(e) { return { id: e.id || uid(), word: e.word || "", queried: e.queried || e.word || "", ipa: e.ipa || "", pos: e.pos || "", pl: e.pl || "", alts: Array.isArray(e.alts) ? e.alts : [], level: e.level || "", note: e.note || "", definition: e.definition || "", lemma: e.lemma || "", lemmaKind: e.lemmaKind || "", sentence: e.sentence || "", sentencePl: e.sentencePl || "", exampleAlts: Array.isArray(e.exampleAlts) ? e.exampleAlts : [], audio: e.audio || "", fromBook: !!e.fromBook, phrase: !!e.phrase, source: e.source || "", createdAt: e.createdAt || Date.now() }; }
 function migrate(lib) {
@@ -122,7 +135,7 @@ function migrate(lib) {
             if ((e.createdAt || 0) > latest)
                 latest = e.createdAt || 0;
         }
-        return { id: b.id || uid(), title: b.title || "", author: b.author || "", cover: b.cover || "", pages: b.pages || 0, spineColor: b.spineColor || "", createdAt: b.createdAt || latest || Date.now(), touchedAt: b.touchedAt || latest || b.createdAt || Date.now(), entries: entries.map(normEntry) };
+        return { id: b.id || uid(), title: b.title || "", author: b.author || "", cover: b.cover || "", pages: b.pages || 0, spineColor: b.spineColor || "", spineShade: b.spineShade || "", createdAt: b.createdAt || latest || Date.now(), touchedAt: b.touchedAt || latest || b.createdAt || Date.now(), entries: entries.map(normEntry) };
     });
     const pool = Array.isArray(lib.pool) ? lib.pool.map(normEntry) : [];
     return { books: out, pool: pool, updatedAt: lib.updatedAt || 0 };
@@ -421,9 +434,16 @@ async function olSearch(q) {
         return [];
     }
 }
-async function olSearchQ(q) {
+async function olSearchParams(t, a) {
+    const p = [];
+    if (t)
+        p.push("title=" + encodeURIComponent(t));
+    if (a)
+        p.push("author=" + encodeURIComponent(a));
+    if (!p.length)
+        return [];
     try {
-        const r = await fetch("https://openlibrary.org/search.json?limit=7&fields=title,author_name,cover_i,key&q=" + encodeURIComponent(q));
+        const r = await fetch("https://openlibrary.org/search.json?limit=7&fields=title,author_name,cover_i,key&" + p.join("&"));
         if (!r.ok)
             return [];
         const d = await r.json();
@@ -433,7 +453,15 @@ async function olSearchQ(q) {
         return [];
     }
 }
-async function gbSearch(q) {
+async function gbSearchParams(t, a) {
+    const parts = [];
+    if (t)
+        parts.push('intitle:"' + t.replace(/"/g, "") + '"');
+    if (a)
+        parts.push('inauthor:"' + a.replace(/"/g, "") + '"');
+    const q = parts.join(" ");
+    if (!q)
+        return [];
     try {
         const r = await fetch("https://www.googleapis.com/books/v1/volumes?maxResults=8&printType=books&q=" + encodeURIComponent(q));
         if (!r.ok)
@@ -454,8 +482,8 @@ async function gbSearch(q) {
         return [];
     }
 }
-async function searchBooks(q) {
-    const [ol, gb] = await Promise.all([olSearchQ(q), gbSearch(q)]);
+async function searchBooks(t, a) {
+    const [ol, gb] = await Promise.all([olSearchParams(t, a), gbSearchParams(t, a)]);
     const seen = {};
     const out = [];
     const push = function (x) { if (!x || !x.title)
@@ -758,7 +786,7 @@ function BookThumb({ book, w, sel }) {
     const totalW = width + thick;
     return (React.createElement("div", { className: "lex-book3d", style: { width: totalW, height: height + 20, position: "relative", perspective: 640, display: "flex", alignItems: "flex-end", justifyContent: "center" } },
         React.createElement("div", { className: "lex-book3d-rot", style: { position: "relative", width: totalW, height: height, transformStyle: "preserve-3d" } },
-            React.createElement("div", { title: pages ? pages + " stron" : count + " słów", style: { position: "absolute", top: 0, left: thick, width: thick, height: height, transformOrigin: "left center", transform: "rotateY(90deg)", backgroundImage: `linear-gradient(to right, ${lighten(spine, 0.5)} 0%, ${lighten(spine, 0.16)} 16%, ${spine} 55%, ${darken(spine, 0.8)} 100%)`, borderRadius: "0 2px 2px 0" } }),
+            React.createElement("div", { title: pages ? pages + " stron" : count + " słów", style: { position: "absolute", top: 0, left: thick, width: thick, height: height, transformOrigin: "left center", transform: "rotateY(90deg)", backgroundImage: `linear-gradient(to right, ${lighten(spine, 0.5)} 0%, ${lighten(spine, 0.16)} 16%, ${spine} 55%, ${book.spineShade || darken(spine, 0.8)} 100%)`, borderRadius: "0 2px 2px 0" } }),
             sel && React.createElement("div", { "aria-hidden": true, style: { position: "absolute", top: -19, left: thick + width * 0.24, width: 13, height: 42, background: C.mark, transform: "translateZ(-1px) rotate(-7deg)", clipPath: "polygon(0% 0%, 50% 24%, 100% 0%, 100% 100%, 0% 100%)", boxShadow: "1px 1px 2px rgba(0,0,0,.25)" } }),
             React.createElement("div", { className: "lex-book", style: { position: "absolute", top: 0, left: thick, width: width, height: height, borderRadius: "1px 3px 3px 1px", backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? spine : fallback, backgroundSize: book.cover ? "contain" : "auto", backgroundRepeat: "no-repeat", backgroundPosition: "center", boxShadow: "inset 1.5px 0 0 rgba(255,255,255,.28)" } }, !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)))));
 }
@@ -810,7 +838,9 @@ function BookModal({ onClose, onSave, initial }) {
     const [cover, setCover] = useState(initial ? (initial.cover || "") : "");
     const [pages, setPages] = useState(initial ? (initial.pages || 0) : 0);
     const [spineColor, setSpineColor] = useState(initial ? (initial.spineColor || "") : "");
+    const [spineShade, setSpineShade] = useState(initial ? (initial.spineShade || "") : "");
     const [autoSpine, setAutoSpine] = useState("");
+    const [savedCovers, setSavedCovers] = useState(() => loadCovers());
     const [loadingCovers, setLoadingCovers] = useState(false);
     const [picked, setPicked] = useState(!!initial);
     const [cropSrc, setCropSrc] = useState("");
@@ -827,20 +857,15 @@ function BookModal({ onClose, onSave, initial }) {
             setSugs([]);
             return;
         }
-        let q = "";
-        if (t.length >= 2 && a)
-            q = t + " " + a;
-        else if (t.length >= 2)
-            q = t;
-        else if (a.length >= 3)
-            q = a;
-        if (!q) {
+        const okT = t.length >= 2;
+        const okA = a.length >= 3;
+        if (!okT && !okA) {
             setSugs([]);
             return;
         }
         if (tRef.current)
             clearTimeout(tRef.current);
-        tRef.current = setTimeout(async () => { setSearching(true); const r = await searchBooks(q); setSearching(false); setSugs(r); }, 420);
+        tRef.current = setTimeout(async () => { setSearching(true); const r = await searchBooks(okT ? t : "", okA ? a : ""); setSearching(false); setSugs(r); }, 420);
         return () => { if (tRef.current)
             clearTimeout(tRef.current); };
     }, [title, author, picked]);
@@ -924,8 +949,11 @@ function BookModal({ onClose, onSave, initial }) {
         return function () { ok = false; };
     }, [cover]);
     const submit = () => { const t = title.trim(); if (!t)
-        return; onSave({ title: t, author: author.trim(), cover: cover || "", pages: Math.max(0, parseInt(pages, 10) || 0), spineColor: spineColor || "" }); };
-    const addCustomCover = (url) => { setCovers(prev => [{ id: "own" + Date.now(), url }].concat(prev)); setCover(url); };
+        return; onSave({ title: t, author: author.trim(), cover: cover || "", pages: Math.max(0, parseInt(pages, 10) || 0), spineColor: spineColor || "", spineShade: spineShade || "" }); };
+    const addCustomCover = (url) => { setCovers(prev => [{ id: "own" + Date.now(), url }].concat(prev)); setCover(url); setSavedCovers(prev => { if (prev.indexOf(url) >= 0)
+        return prev; const next = [url].concat(prev).slice(0, 40); saveCovers(next); return next; }); };
+    const removeSavedCover = (url) => { setSavedCovers(prev => { const next = prev.filter(x => x !== url); saveCovers(next); return next; }); if (cover === url)
+        setCover(""); };
     const onFile = async (e) => {
         const f = e.target.files && e.target.files[0];
         if (!f) {
@@ -967,6 +995,8 @@ function BookModal({ onClose, onSave, initial }) {
                     React.createElement("div", { className: "lex-cover-grid lex-scroll", style: { maxHeight: 232, overflowY: "auto", paddingRight: 2 } },
                         covers.map((c, i) => (React.createElement("div", { key: i, onClick: () => { setCover(c.url); if (c.pages)
                                 setPages(c.pages); }, className: "lex-cover-opt" + (cover === c.url ? " sel" : ""), style: { backgroundImage: `url(${c.url})`, position: "relative" } }, c.pages > 0 && React.createElement("span", { style: { position: "absolute", bottom: 2, right: 2, fontSize: 9, fontWeight: 800, color: "#fff", background: "rgba(11,11,10,.75)", borderRadius: 4, padding: "1px 4px" } }, c.pages + " s.")))),
+                        savedCovers.filter(u => !covers.some(c => c.url === u)).map((u, i) => (React.createElement("div", { key: "sv" + i, onClick: () => setCover(u), className: "lex-cover-opt" + (cover === u ? " sel" : ""), style: { backgroundImage: `url(${u})`, position: "relative" } },
+                            React.createElement("button", { onClick: (e) => { e.stopPropagation(); removeSavedCover(u); }, "aria-label": "usu\u0144 z zapami\u0119tanych", title: "usu\u0144 z zapami\u0119tanych", style: { position: "absolute", top: 3, right: 3, width: 17, height: 17, borderRadius: "50%", border: "none", background: "rgba(11,11,10,.72)", color: "#fff", fontSize: 11, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } }, "\u00D7")))),
                         React.createElement("div", { onClick: () => { if (fileRef.current)
                                 fileRef.current.click(); }, className: "lex-cover-opt none" }, "+ w\u0142asna"),
                         React.createElement("div", { onClick: () => setCover(""), className: "lex-cover-opt none" + (cover === "" ? " sel" : "") }, "bez")),
@@ -981,6 +1011,12 @@ function BookModal({ onClose, onSave, initial }) {
                         React.createElement("input", { type: "color", value: rgbToHex(spineColor || autoSpine || "#8a7f6a"), onChange: (e) => setSpineColor(e.target.value), style: { position: "absolute", inset: 0, opacity: 0, cursor: "pointer", border: "none", padding: 0 } })),
                     React.createElement("div", { style: { fontSize: 11.5, color: C.inkSoft, fontWeight: 600 } }, spineColor ? "w\u0142asny" : "z okładki (auto)"),
                     spineColor && React.createElement("button", { onClick: () => setSpineColor(""), className: "lex-primary", style: { marginLeft: "auto", border: "none", background: C.paperDeep, color: C.ink, fontWeight: 700, fontSize: 12, padding: "6px 10px", borderRadius: 9, cursor: "pointer" } }, "auto")),
+                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginTop: 12 } },
+                    React.createElement("div", { style: { fontSize: 11, letterSpacing: ".1em", color: C.inkSoft, fontWeight: 700 } }, "kolor cienia"),
+                    React.createElement("label", { style: { width: 34, height: 34, borderRadius: 9, border: `1px solid ${C.line}`, background: (spineShade || darken(spineColor || autoSpine || "#8a7f6a", 0.8)), cursor: "pointer", flexShrink: 0, position: "relative", overflow: "hidden" } },
+                        React.createElement("input", { type: "color", value: rgbToHex(spineShade || darken(spineColor || autoSpine || "#8a7f6a", 0.8)), onChange: (e) => setSpineShade(e.target.value), style: { position: "absolute", inset: 0, opacity: 0, cursor: "pointer", border: "none", padding: 0 } })),
+                    React.createElement("div", { style: { fontSize: 11.5, color: C.inkSoft, fontWeight: 600 } }, spineShade ? "w\u0142asny" : "auto (z grzbietu)"),
+                    spineShade && React.createElement("button", { onClick: () => setSpineShade(""), className: "lex-primary", style: { marginLeft: "auto", border: "none", background: C.paperDeep, color: C.ink, fontWeight: 700, fontSize: 12, padding: "6px 10px", borderRadius: 9, cursor: "pointer" } }, "auto")),
                 React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 16 } },
                     React.createElement("button", { onClick: submit, disabled: !title.trim(), className: "lex-primary", style: { flex: 1, padding: "12px", borderRadius: 11, border: "none", background: C.lime, color: C.ink, fontSize: 15, fontWeight: 800, cursor: "pointer" } }, initial ? "zapisz" : "dodaj"),
                     React.createElement("button", { onClick: onClose, className: "lex-primary", style: { padding: "12px 16px", borderRadius: 11, border: `1px solid ${C.ink}`, background: "transparent", color: C.ink, fontSize: 15, fontWeight: 700, cursor: "pointer" } }, "anuluj")))),
@@ -1279,7 +1315,7 @@ function App() {
         return () => { cancel = true; clearTimeout(t); };
     }, [word]);
     const addBook = (data) => {
-        const b = { id: uid(), title: data.title, author: data.author || "", cover: data.cover || "", pages: data.pages || 0, spineColor: data.spineColor || "", createdAt: Date.now(), touchedAt: Date.now(), entries: [] };
+        const b = { id: uid(), title: data.title, author: data.author || "", cover: data.cover || "", pages: data.pages || 0, spineColor: data.spineColor || "", spineShade: data.spineShade || "", createdAt: Date.now(), touchedAt: Date.now(), entries: [] };
         setAndPersist(prev => [b, ...prev]);
         setActiveId(b.id);
         setShowAdd(false);
@@ -1312,7 +1348,7 @@ function App() {
             clearTimeout(tapTimerRef.current);
         tapTimerRef.current = setTimeout(() => { setSidebarOpen(false); tapTimerRef.current = null; }, 360);
     };
-    const updateBook = (id, data) => { setAndPersist(prev => prev.map(b => b.id === id ? { ...b, title: data.title, author: data.author || "", cover: data.cover || "", pages: data.pages || 0, spineColor: data.spineColor || "", touchedAt: Date.now() } : b)); };
+    const updateBook = (id, data) => { setAndPersist(prev => prev.map(b => b.id === id ? { ...b, title: data.title, author: data.author || "", cover: data.cover || "", pages: data.pages || 0, spineColor: data.spineColor || "", spineShade: data.spineShade || "", touchedAt: Date.now() } : b)); };
     const pickAlt = (eid, newPl) => { setAndPersist(prev => prev.map(b => b.id === activeId ? { ...b, touchedAt: Date.now(), entries: b.entries.map(e => { if (e.id !== eid)
             return e; const cand = [e.pl].concat(e.alts || []).filter(a => a && a.toLowerCase() !== newPl.toLowerCase()); const uniq = []; const seen = {}; for (const o of cand) {
             const k = o.toLowerCase();
