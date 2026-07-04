@@ -58,8 +58,8 @@ const LEX_CSS = `
 .lex-aside{position:relative;transform:none;transition:transform .25s ease;} .lex-overlay{display:none;} .lex-menu{display:none;}
 @media (max-width:767px){ .lex-aside{position:fixed;top:0;left:0;height:100%;transform:translateX(-100%);box-shadow:2px 0 24px #0004;} .lex-aside.open{transform:translateX(0);} .lex-overlay{display:block;} .lex-menu{display:inline-flex;} }
 .lex-book3d{cursor:pointer;position:relative;}
-.lex-book3d-tilt{transition:transform .18s ease;}
-.lex-book3d:hover .lex-book3d-tilt{transform:translateY(-3px);}
+.lex-book3d-rot{transform:rotateY(24deg);transition:transform .18s ease;}
+.lex-book3d:hover .lex-book3d-rot{transform:rotateY(19deg) translateY(-3px);}
 .lex-book-glow{position:absolute;left:50%;bottom:-2px;width:135%;height:40%;transform:translateX(-50%);background:radial-gradient(ellipse at center, #B6EA4D 0%, #A6E22B 34%, rgba(166,226,43,0) 72%);filter:blur(2.5px);opacity:.9;pointer-events:none;}
 .lex-book{background-position:center;overflow:hidden;}
 .lex-book-title{position:absolute;inset:0;padding:8px 8px 8px 11px;color:#fff;font-size:11px;font-weight:800;line-height:1.22;overflow:hidden;text-shadow:0 1px 3px rgba(0,0,0,.6);background:linear-gradient(160deg,rgba(0,0,0,.15),rgba(0,0,0,.45));}
@@ -122,7 +122,7 @@ function migrate(lib) {
             if ((e.createdAt || 0) > latest)
                 latest = e.createdAt || 0;
         }
-        return { id: b.id || uid(), title: b.title || "", author: b.author || "", cover: b.cover || "", pages: b.pages || 0, createdAt: b.createdAt || latest || Date.now(), touchedAt: b.touchedAt || latest || b.createdAt || Date.now(), entries: entries.map(normEntry) };
+        return { id: b.id || uid(), title: b.title || "", author: b.author || "", cover: b.cover || "", pages: b.pages || 0, spineColor: b.spineColor || "", createdAt: b.createdAt || latest || Date.now(), touchedAt: b.touchedAt || latest || b.createdAt || Date.now(), entries: entries.map(normEntry) };
     });
     const pool = Array.isArray(lib.pool) ? lib.pool.map(normEntry) : [];
     return { books: out, pool: pool, updatedAt: lib.updatedAt || 0 };
@@ -651,6 +651,13 @@ function sampleEdgeColor(url) {
         im.src = url;
     });
 }
+function rgbToHex(rgb) {
+    const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(rgb || "");
+    if (!m)
+        return /^#[0-9a-f]{6}$/i.test(rgb || "") ? rgb : "#8a7f6a";
+    const h = function (v) { return ("0" + (+v).toString(16)).slice(-2); };
+    return "#" + h(m[1]) + h(m[2]) + h(m[3]);
+}
 function darken(rgb, f) {
     const m = /rgb\((\d+),(\d+),(\d+)\)/.exec(rgb || "");
     if (!m)
@@ -664,12 +671,17 @@ function BookThumb({ book, w, sel }) {
     const count = (book.entries && book.entries.length) || 0;
     const pages = book.pages || 0;
     const thick = pages > 0
-        ? Math.max(6, Math.min(24, Math.round(pages / 32)))
-        : Math.max(6, Math.min(16, 5 + count * 0.6));
+        ? Math.max(7, Math.min(26, Math.round(pages / 30)))
+        : Math.max(7, Math.min(18, 5 + count * 0.6));
     const fallback = bookColor(book.title || "");
-    const [spineCol, setSpineCol] = useState(book.cover ? null : fallback);
+    const manual = book.spineColor || "";
+    const [spineCol, setSpineCol] = useState(manual || (book.cover ? null : fallback));
     useEffect(function () {
         let ok = true;
+        if (manual) {
+            setSpineCol(manual);
+            return function () { };
+        }
         if (book.cover) {
             sampleEdgeColor(book.cover).then(function (c) { if (ok)
                 setSpineCol(c || fallback); });
@@ -677,14 +689,14 @@ function BookThumb({ book, w, sel }) {
         else
             setSpineCol(fallback);
         return function () { ok = false; };
-    }, [book.cover]);
+    }, [book.cover, manual]);
     const spine = spineCol || fallback;
     const totalW = width + thick;
-    return (React.createElement("div", { className: "lex-book3d", style: { width: totalW, height: height + 14, position: "relative", display: "flex", alignItems: "flex-end", justifyContent: "center" } },
+    return (React.createElement("div", { className: "lex-book3d", style: { width: totalW, height: height + 14, position: "relative", perspective: 560, display: "flex", alignItems: "flex-end", justifyContent: "center" } },
         React.createElement("div", { className: "lex-book-glow" }),
-        React.createElement("div", { className: "lex-book3d-tilt", style: { position: "relative", width: totalW, height: height } },
-            React.createElement("div", { style: { position: "absolute", top: 0, left: 0, width: thick, height: height, borderRadius: "3px 0 0 3px", background: spine, backgroundImage: "linear-gradient(90deg, rgba(0,0,0,.32) 0%, rgba(255,255,255,.14) 42%, rgba(0,0,0,.14) 100%)" } }),
-            React.createElement("div", { className: "lex-book", style: { position: "absolute", top: 0, left: thick, width: width, height: height, borderRadius: "1px 3px 3px 1px", backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? "#efefe8" : fallback, backgroundSize: book.cover ? "contain" : "auto", backgroundRepeat: "no-repeat", backgroundPosition: "center", boxShadow: "inset 3px 0 6px rgba(0,0,0,.22)" } }, !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)),
+        React.createElement("div", { className: "lex-book3d-rot", style: { position: "relative", width: totalW, height: height, transformStyle: "preserve-3d" } },
+            React.createElement("div", { title: pages ? pages + " stron" : count + " słów", style: { position: "absolute", top: 0, left: thick, width: thick, height: height, transformOrigin: "left center", transform: "rotateY(-90deg)", background: spine, backgroundImage: "linear-gradient(to right, rgba(0,0,0,.38) 0%, rgba(255,255,255,.12) 58%, rgba(0,0,0,.22) 100%)", borderRadius: "2px 0 0 2px" } }),
+            React.createElement("div", { className: "lex-book", style: { position: "absolute", top: 0, left: thick, width: width, height: height, borderRadius: "1px 3px 3px 1px", backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? spine : fallback, backgroundSize: book.cover ? "contain" : "auto", backgroundRepeat: "no-repeat", backgroundPosition: "center" } }, !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)),
             sel && React.createElement("div", { "aria-hidden": true, style: { position: "absolute", top: -12, left: thick + width * 0.68, width: 11, height: 24, background: C.mark, clipPath: "polygon(0 0, 100% 0, 100% 100%, 50% 74%, 0 100%)", boxShadow: "0 1px 3px rgba(0,0,0,.3)", zIndex: 3 } }))));
 }
 function fileToDataURL(file) { return new Promise(function (res, rej) { const r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = function () { rej(new Error("read")); }; r.readAsDataURL(file); }); }
@@ -734,6 +746,8 @@ function BookModal({ onClose, onSave, initial }) {
     const [covers, setCovers] = useState(initial && initial.cover ? [{ id: 0, url: initial.cover }] : []);
     const [cover, setCover] = useState(initial ? (initial.cover || "") : "");
     const [pages, setPages] = useState(initial ? (initial.pages || 0) : 0);
+    const [spineColor, setSpineColor] = useState(initial ? (initial.spineColor || "") : "");
+    const [autoSpine, setAutoSpine] = useState("");
     const [loadingCovers, setLoadingCovers] = useState(false);
     const [picked, setPicked] = useState(!!initial);
     const [cropSrc, setCropSrc] = useState("");
@@ -811,8 +825,18 @@ function BookModal({ onClose, onSave, initial }) {
             setPages(withPages.pages);
         setLoadingCovers(false);
     };
+    useEffect(function () {
+        let ok = true;
+        if (cover) {
+            sampleEdgeColor(cover).then(function (c) { if (ok && c)
+                setAutoSpine(c); });
+        }
+        else
+            setAutoSpine("");
+        return function () { ok = false; };
+    }, [cover]);
     const submit = () => { const t = title.trim(); if (!t)
-        return; onSave({ title: t, author: author.trim(), cover: cover || "", pages: Math.max(0, parseInt(pages, 10) || 0) }); };
+        return; onSave({ title: t, author: author.trim(), cover: cover || "", pages: Math.max(0, parseInt(pages, 10) || 0), spineColor: spineColor || "" }); };
     const addCustomCover = (url) => { setCovers(prev => [{ id: "own" + Date.now(), url }].concat(prev)); setCover(url); };
     const onFile = async (e) => {
         const f = e.target.files && e.target.files[0];
@@ -863,6 +887,12 @@ function BookModal({ onClose, onSave, initial }) {
                     React.createElement("div", { style: { fontSize: 11, letterSpacing: ".1em", color: C.inkSoft, fontWeight: 700 } }, "liczba stron"),
                     React.createElement("input", { className: "lex-field", type: "number", min: "0", inputMode: "numeric", value: pages || "", onChange: (e) => setPages(e.target.value), placeholder: "?", style: { width: 92, fontSize: 15, fontWeight: 700, padding: "8px 11px" } }),
                     React.createElement("div", { style: { fontSize: 11.5, color: C.inkSoft, fontWeight: 600 } }, "decyduje o grubo\u015Bci grzbietu")),
+                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginTop: 12 } },
+                    React.createElement("div", { style: { fontSize: 11, letterSpacing: ".1em", color: C.inkSoft, fontWeight: 700 } }, "kolor grzbietu"),
+                    React.createElement("label", { style: { width: 34, height: 34, borderRadius: 9, border: `1px solid ${C.line}`, background: (spineColor || autoSpine || "#8a7f6a"), cursor: "pointer", flexShrink: 0, position: "relative", overflow: "hidden" } },
+                        React.createElement("input", { type: "color", value: rgbToHex(spineColor || autoSpine || "#8a7f6a"), onChange: (e) => setSpineColor(e.target.value), style: { position: "absolute", inset: 0, opacity: 0, cursor: "pointer", border: "none", padding: 0 } })),
+                    React.createElement("div", { style: { fontSize: 11.5, color: C.inkSoft, fontWeight: 600 } }, spineColor ? "w\u0142asny" : "z okładki (auto)"),
+                    spineColor && React.createElement("button", { onClick: () => setSpineColor(""), className: "lex-primary", style: { marginLeft: "auto", border: "none", background: C.paperDeep, color: C.ink, fontWeight: 700, fontSize: 12, padding: "6px 10px", borderRadius: 9, cursor: "pointer" } }, "auto")),
                 React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 16 } },
                     React.createElement("button", { onClick: submit, disabled: !title.trim(), className: "lex-primary", style: { flex: 1, padding: "12px", borderRadius: 11, border: "none", background: C.lime, color: C.ink, fontSize: 15, fontWeight: 800, cursor: "pointer" } }, initial ? "zapisz" : "dodaj"),
                     React.createElement("button", { onClick: onClose, className: "lex-primary", style: { padding: "12px 16px", borderRadius: 11, border: `1px solid ${C.ink}`, background: "transparent", color: C.ink, fontSize: 15, fontWeight: 700, cursor: "pointer" } }, "anuluj")))),
@@ -1161,7 +1191,7 @@ function App() {
         return () => { cancel = true; clearTimeout(t); };
     }, [word]);
     const addBook = (data) => {
-        const b = { id: uid(), title: data.title, author: data.author || "", cover: data.cover || "", pages: data.pages || 0, createdAt: Date.now(), touchedAt: Date.now(), entries: [] };
+        const b = { id: uid(), title: data.title, author: data.author || "", cover: data.cover || "", pages: data.pages || 0, spineColor: data.spineColor || "", createdAt: Date.now(), touchedAt: Date.now(), entries: [] };
         setAndPersist(prev => [b, ...prev]);
         setActiveId(b.id);
         setShowAdd(false);
@@ -1194,7 +1224,7 @@ function App() {
             clearTimeout(tapTimerRef.current);
         tapTimerRef.current = setTimeout(() => { setSidebarOpen(false); tapTimerRef.current = null; }, 360);
     };
-    const updateBook = (id, data) => { setAndPersist(prev => prev.map(b => b.id === id ? { ...b, title: data.title, author: data.author || "", cover: data.cover || "", pages: data.pages || 0, touchedAt: Date.now() } : b)); };
+    const updateBook = (id, data) => { setAndPersist(prev => prev.map(b => b.id === id ? { ...b, title: data.title, author: data.author || "", cover: data.cover || "", pages: data.pages || 0, spineColor: data.spineColor || "", touchedAt: Date.now() } : b)); };
     const pickAlt = (eid, newPl) => { setAndPersist(prev => prev.map(b => b.id === activeId ? { ...b, touchedAt: Date.now(), entries: b.entries.map(e => { if (e.id !== eid)
             return e; const cand = [e.pl].concat(e.alts || []).filter(a => a && a.toLowerCase() !== newPl.toLowerCase()); const uniq = []; const seen = {}; for (const o of cand) {
             const k = o.toLowerCase();
