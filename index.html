@@ -58,8 +58,8 @@ const LEX_CSS = `
 .lex-aside{position:relative;transform:none;transition:transform .25s ease;} .lex-overlay{display:none;} .lex-menu{display:none;}
 @media (max-width:767px){ .lex-aside{position:fixed;top:0;left:0;height:100%;transform:translateX(-100%);box-shadow:2px 0 24px #0004;} .lex-aside.open{transform:translateX(0);} .lex-overlay{display:block;} .lex-menu{display:inline-flex;} }
 .lex-book3d{cursor:pointer;position:relative;}
-.lex-book3d-rot{transform:rotateY(24deg);transition:transform .22s cubic-bezier(.2,.7,.3,1),filter .22s ease;filter:drop-shadow(0 1px 1px rgba(18,26,6,.22)) drop-shadow(0 8px 18px rgba(18,26,6,.28));}
-.lex-book3d:hover .lex-book3d-rot{transform:rotateY(19deg) translateY(-5px);filter:drop-shadow(0 2px 3px rgba(18,26,6,.2)) drop-shadow(0 18px 34px rgba(18,26,6,.3));}
+.lex-book3d-rot{transform:rotateY(30deg);transition:transform .22s cubic-bezier(.2,.7,.3,1),filter .22s ease;filter:drop-shadow(0 1px 1px rgba(18,26,6,.22)) drop-shadow(0 8px 18px rgba(18,26,6,.28));}
+.lex-book3d:hover .lex-book3d-rot{transform:rotateY(24deg) translateY(-5px);filter:drop-shadow(0 2px 3px rgba(18,26,6,.2)) drop-shadow(0 18px 34px rgba(18,26,6,.3));}
 .lex-book{background-position:center;overflow:hidden;}
 .lex-book-title{position:absolute;inset:0;padding:8px 8px 8px 11px;color:#fff;font-size:11px;font-weight:800;line-height:1.22;overflow:hidden;text-shadow:0 1px 3px rgba(0,0,0,.6);background:linear-gradient(160deg,rgba(0,0,0,.15),rgba(0,0,0,.45));}
 .lex-book-x{position:absolute;top:-7px;right:-7px;z-index:5;width:22px;height:22px;border-radius:50%;border:2px solid ${C.shelf};background:${C.ink};color:#fff;font-size:13px;line-height:1;cursor:pointer;align-items:center;justify-content:center;}
@@ -677,8 +677,8 @@ function BookThumb({ book, w, sel }) {
     const count = (book.entries && book.entries.length) || 0;
     const pages = book.pages || 0;
     const thick = pages > 0
-        ? Math.max(11, Math.min(30, Math.round(pages / 26)))
-        : Math.max(11, Math.min(22, 7 + count * 0.7));
+        ? Math.round(Math.max(10, Math.min(46, 9 + pages * 0.045)))
+        : Math.round(Math.max(10, Math.min(24, 9 + count * 0.8)));
     const fallback = bookColor(book.title || "");
     const manual = book.spineColor || "";
     const [spineCol, setSpineCol] = useState(manual || (book.cover ? null : fallback));
@@ -698,9 +698,9 @@ function BookThumb({ book, w, sel }) {
     }, [book.cover, manual]);
     const spine = spineCol || fallback;
     const totalW = width + thick;
-    return (React.createElement("div", { className: "lex-book3d", style: { width: totalW, height: height + 20, position: "relative", perspective: 560, display: "flex", alignItems: "flex-end", justifyContent: "center" } },
+    return (React.createElement("div", { className: "lex-book3d", style: { width: totalW, height: height + 20, position: "relative", perspective: 640, display: "flex", alignItems: "flex-end", justifyContent: "center" } },
         React.createElement("div", { className: "lex-book3d-rot", style: { position: "relative", width: totalW, height: height, transformStyle: "preserve-3d" } },
-            React.createElement("div", { title: pages ? pages + " stron" : count + " słów", style: { position: "absolute", top: 0, left: thick, width: thick, height: height, transformOrigin: "left center", transform: "rotateY(90deg)", backgroundImage: `linear-gradient(to right, ${lighten(spine, 0.55)} 0%, ${lighten(spine, 0.16)} 14%, ${spine} 52%, ${darken(spine, 0.62)} 100%)`, borderRadius: "0 2px 2px 0" } }),
+            React.createElement("div", { title: pages ? pages + " stron" : count + " słów", style: { position: "absolute", top: 0, left: thick, width: thick, height: height, transformOrigin: "left center", transform: "rotateY(90deg)", backgroundImage: `linear-gradient(to right, ${lighten(spine, 0.62)} 0%, ${lighten(spine, 0.2)} 16%, ${spine} 55%, ${darken(spine, 0.5)} 100%)`, borderRadius: "0 2px 2px 0" } }),
             sel && React.createElement("div", { "aria-hidden": true, style: { position: "absolute", top: -19, left: thick + width * 0.24, width: 13, height: 42, background: C.mark, transform: "translateZ(-1px) rotate(-7deg)", clipPath: "polygon(0% 0%, 50% 24%, 100% 0%, 100% 100%, 0% 100%)", boxShadow: "1px 1px 2px rgba(0,0,0,.25)" } }),
             React.createElement("div", { className: "lex-book", style: { position: "absolute", top: 0, left: thick, width: width, height: height, borderRadius: "1px 3px 3px 1px", backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? spine : fallback, backgroundSize: book.cover ? "contain" : "auto", backgroundRepeat: "no-repeat", backgroundPosition: "center", boxShadow: "inset 1.5px 0 0 rgba(255,255,255,.28)" } }, !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)))));
 }
