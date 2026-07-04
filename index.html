@@ -58,8 +58,8 @@ const LEX_CSS = `
 .lex-aside{position:relative;transform:none;transition:transform .25s ease;} .lex-overlay{display:none;} .lex-menu{display:none;}
 @media (max-width:767px){ .lex-aside{position:fixed;top:0;left:0;height:100%;transform:translateX(-100%);box-shadow:2px 0 24px #0004;} .lex-aside.open{transform:translateX(0);} .lex-overlay{display:block;} .lex-menu{display:inline-flex;} }
 .lex-book3d{cursor:pointer;position:relative;}
-.lex-book3d-rot{transform:rotateY(24deg);transition:transform .18s ease;filter:drop-shadow(3px 7px 6px rgba(11,11,10,.34));}
-.lex-book3d:hover .lex-book3d-rot{transform:rotateY(19deg) translateY(-3px);}
+.lex-book3d-rot{transform:rotateY(26deg);transition:transform .18s ease;filter:drop-shadow(4px 8px 6px rgba(34,48,4,.5));}
+.lex-book3d:hover .lex-book3d-rot{transform:rotateY(21deg) translateY(-3px);}
 .lex-book{background-position:center;overflow:hidden;}
 .lex-book-title{position:absolute;inset:0;padding:8px 8px 8px 11px;color:#fff;font-size:11px;font-weight:800;line-height:1.22;overflow:hidden;text-shadow:0 1px 3px rgba(0,0,0,.6);background:linear-gradient(160deg,rgba(0,0,0,.15),rgba(0,0,0,.45));}
 .lex-book-x{position:absolute;top:-7px;right:-7px;z-index:5;width:22px;height:22px;border-radius:50%;border:2px solid ${C.shelf};background:${C.ink};color:#fff;font-size:13px;line-height:1;cursor:pointer;align-items:center;justify-content:center;}
@@ -691,11 +691,11 @@ function BookThumb({ book, w, sel }) {
     }, [book.cover, manual]);
     const spine = spineCol || fallback;
     const totalW = width + thick;
-    return (React.createElement("div", { className: "lex-book3d", style: { width: totalW, height: height + 14, position: "relative", perspective: 560, display: "flex", alignItems: "flex-end", justifyContent: "center" } },
+    return (React.createElement("div", { className: "lex-book3d", style: { width: totalW, height: height + 20, position: "relative", perspective: 560, display: "flex", alignItems: "flex-end", justifyContent: "center" } },
         React.createElement("div", { className: "lex-book3d-rot", style: { position: "relative", width: totalW, height: height, transformStyle: "preserve-3d" } },
-            React.createElement("div", { title: pages ? pages + " stron" : count + " słów", style: { position: "absolute", top: 0, left: 0, width: thick, height: height, transformOrigin: "right center", transform: "rotateY(90deg)", backgroundImage: `linear-gradient(to right, ${darken(spine, 0.88)} 0%, ${spine} 32%, ${darken(spine, 0.78)} 78%, ${darken(spine, 0.5)} 100%)`, borderRadius: "2px 0 0 2px" } }),
-            React.createElement("div", { className: "lex-book", style: { position: "absolute", top: 0, left: thick, width: width, height: height, borderRadius: "1px 3px 3px 1px", backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? spine : fallback, backgroundSize: book.cover ? "contain" : "auto", backgroundRepeat: "no-repeat", backgroundPosition: "center" } }, !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)),
-            sel && React.createElement("div", { "aria-hidden": true, style: { position: "absolute", top: -12, left: thick + width * 0.68, width: 11, height: 24, background: C.mark, clipPath: "polygon(0 0, 100% 0, 100% 100%, 50% 74%, 0 100%)", boxShadow: "0 1px 3px rgba(0,0,0,.3)", zIndex: 3 } }))));
+            React.createElement("div", { title: pages ? pages + " stron" : count + " słów", style: { position: "absolute", top: 0, left: thick, width: thick, height: height, transformOrigin: "left center", transform: "rotateY(90deg)", backgroundImage: `linear-gradient(to right, ${darken(spine, 0.5)} 0%, ${darken(spine, 0.78)} 20%, ${spine} 66%, ${darken(spine, 0.88)} 100%)`, borderRadius: "0 2px 2px 0" } }),
+            sel && React.createElement("div", { "aria-hidden": true, style: { position: "absolute", top: -19, left: thick + width * 0.24, width: 13, height: 42, background: C.mark, transform: "translateZ(-1px) rotate(-7deg)", clipPath: "polygon(0% 0%, 50% 24%, 100% 0%, 100% 100%, 0% 100%)", boxShadow: "1px 1px 2px rgba(0,0,0,.25)" } }),
+            React.createElement("div", { className: "lex-book", style: { position: "absolute", top: 0, left: thick, width: width, height: height, borderRadius: "1px 3px 3px 1px", backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? spine : fallback, backgroundSize: book.cover ? "contain" : "auto", backgroundRepeat: "no-repeat", backgroundPosition: "center" } }, !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)))));
 }
 function fileToDataURL(file) { return new Promise(function (res, rej) { const r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = function () { rej(new Error("read")); }; r.readAsDataURL(file); }); }
 function loadImg(src) { return new Promise(function (res, rej) { const im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej(new Error("img")); }; im.src = src; }); }
@@ -1304,7 +1304,8 @@ function App() {
             React.createElement("div", { style: { padding: "4px 12px 16px", flex: 1 } },
                 React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } },
                     React.createElement("div", { key: "__add", style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
-                        React.createElement("button", { className: "lex-addtile", onClick: () => setShowAdd(true), style: { width: 66, height: 94 } }, "+"),
+                        React.createElement("div", { style: { height: Math.round(66 * 1.5) + 20, display: "flex", alignItems: "flex-end", justifyContent: "center" } },
+                            React.createElement("button", { className: "lex-addtile", onClick: () => setShowAdd(true), style: { width: 66, height: Math.round(66 * 1.5) } }, "+")),
                         React.createElement("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.shelfMute } }, "dodaj")),
                     books.slice().sort((a, b) => (b.touchedAt || 0) - (a.touchedAt || 0)).map(b => (React.createElement("div", { key: b.id, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
                         React.createElement("div", { style: { position: "relative" } },
