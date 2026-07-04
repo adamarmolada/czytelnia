@@ -421,6 +421,50 @@ async function olSearch(q) {
         return [];
     }
 }
+async function olSearchQ(q) {
+    try {
+        const r = await fetch("https://openlibrary.org/search.json?limit=7&fields=title,author_name,cover_i,key&q=" + encodeURIComponent(q));
+        if (!r.ok)
+            return [];
+        const d = await r.json();
+        return (d.docs || []).map(doc => ({ title: doc.title, author: (doc.author_name && doc.author_name[0]) || "", coverId: doc.cover_i || null, workKey: doc.key || "", thumb: doc.cover_i ? ("https://covers.openlibrary.org/b/id/" + doc.cover_i + "-S.jpg") : "" })).filter(x => x.title).slice(0, 7);
+    }
+    catch {
+        return [];
+    }
+}
+async function gbSearch(q) {
+    try {
+        const r = await fetch("https://www.googleapis.com/books/v1/volumes?maxResults=8&printType=books&q=" + encodeURIComponent(q));
+        if (!r.ok)
+            return [];
+        const d = await r.json();
+        const out = [];
+        for (const it of d.items || []) {
+            const v = it.volumeInfo || {};
+            if (!v.title)
+                continue;
+            const l = v.imageLinks || {};
+            const thumb = String(l.smallThumbnail || l.thumbnail || "").replace(/^http:/, "https:");
+            out.push({ title: v.title, author: (v.authors && v.authors[0]) || "", coverId: null, workKey: "", thumb: thumb });
+        }
+        return out;
+    }
+    catch {
+        return [];
+    }
+}
+async function searchBooks(q) {
+    const [ol, gb] = await Promise.all([olSearchQ(q), gbSearch(q)]);
+    const seen = {};
+    const out = [];
+    const push = function (x) { if (!x || !x.title)
+        return; const k = (x.title + "|" + (x.author || "")).toLowerCase().trim(); if (seen[k])
+        return; seen[k] = 1; out.push(x); };
+    (ol || []).forEach(push);
+    (gb || []).forEach(push);
+    return out.slice(0, 8);
+}
 async function olCovers(workKey) {
     try {
         if (!workKey)
@@ -714,7 +758,7 @@ function BookThumb({ book, w, sel }) {
     const totalW = width + thick;
     return (React.createElement("div", { className: "lex-book3d", style: { width: totalW, height: height + 20, position: "relative", perspective: 640, display: "flex", alignItems: "flex-end", justifyContent: "center" } },
         React.createElement("div", { className: "lex-book3d-rot", style: { position: "relative", width: totalW, height: height, transformStyle: "preserve-3d" } },
-            React.createElement("div", { title: pages ? pages + " stron" : count + " słów", style: { position: "absolute", top: 0, left: thick, width: thick, height: height, transformOrigin: "left center", transform: "rotateY(90deg)", backgroundImage: `linear-gradient(to right, ${lighten(spine, 0.5)} 0%, ${lighten(spine, 0.16)} 16%, ${spine} 55%, ${darken(spine, 0.72)} 100%)`, borderRadius: "0 2px 2px 0" } }),
+            React.createElement("div", { title: pages ? pages + " stron" : count + " słów", style: { position: "absolute", top: 0, left: thick, width: thick, height: height, transformOrigin: "left center", transform: "rotateY(90deg)", backgroundImage: `linear-gradient(to right, ${lighten(spine, 0.5)} 0%, ${lighten(spine, 0.16)} 16%, ${spine} 55%, ${darken(spine, 0.8)} 100%)`, borderRadius: "0 2px 2px 0" } }),
             sel && React.createElement("div", { "aria-hidden": true, style: { position: "absolute", top: -19, left: thick + width * 0.24, width: 13, height: 42, background: C.mark, transform: "translateZ(-1px) rotate(-7deg)", clipPath: "polygon(0% 0%, 50% 24%, 100% 0%, 100% 100%, 0% 100%)", boxShadow: "1px 1px 2px rgba(0,0,0,.25)" } }),
             React.createElement("div", { className: "lex-book", style: { position: "absolute", top: 0, left: thick, width: width, height: height, borderRadius: "1px 3px 3px 1px", backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? spine : fallback, backgroundSize: book.cover ? "contain" : "auto", backgroundRepeat: "no-repeat", backgroundPosition: "center", boxShadow: "inset 1.5px 0 0 rgba(255,255,255,.28)" } }, !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)))));
 }
@@ -777,17 +821,29 @@ function BookModal({ onClose, onSave, initial }) {
         merged.push(c);
     } }); return merged; }); };
     useEffect(() => {
-        const q = title.trim();
-        if (picked || q.length < 2) {
+        const t = title.trim();
+        const a = author.trim();
+        if (picked) {
+            setSugs([]);
+            return;
+        }
+        let q = "";
+        if (t.length >= 2 && a)
+            q = t + " " + a;
+        else if (t.length >= 2)
+            q = t;
+        else if (a.length >= 3)
+            q = a;
+        if (!q) {
             setSugs([]);
             return;
         }
         if (tRef.current)
             clearTimeout(tRef.current);
-        tRef.current = setTimeout(async () => { setSearching(true); const r = await olSearch(q); setSearching(false); setSugs(r); }, 420);
+        tRef.current = setTimeout(async () => { setSearching(true); const r = await searchBooks(q); setSearching(false); setSugs(r); }, 420);
         return () => { if (tRef.current)
             clearTimeout(tRef.current); };
-    }, [title, picked]);
+    }, [title, author, picked]);
     useEffect(() => {
         if (!initial)
             return;
@@ -823,10 +879,23 @@ function BookModal({ onClose, onSave, initial }) {
         setCovers([]);
         setCover("");
         setPages(0);
-        const [olList, gbList] = await Promise.all([olCovers(s.workKey), gbCovers(s.title, s.author || "")]);
+        let workKey = s.workKey || "";
+        let coverId = s.coverId || null;
+        if (!workKey) {
+            try {
+                const alt = await olSearch(s.title);
+                if (alt && alt[0]) {
+                    workKey = alt[0].workKey || "";
+                    if (!coverId)
+                        coverId = alt[0].coverId || null;
+                }
+            }
+            catch (e) { }
+        }
+        const [olList, gbList] = await Promise.all([olCovers(workKey), gbCovers(s.title, s.author || "")]);
         let list = olList || [];
-        if (!list.length && s.coverId)
-            list = [{ id: s.coverId, url: "https://covers.openlibrary.org/b/id/" + s.coverId + "-M.jpg", pages: 0 }];
+        if (!list.length && coverId)
+            list = [{ id: coverId, url: "https://covers.openlibrary.org/b/id/" + coverId + "-M.jpg", pages: 0 }];
         const seen = {};
         const merged = [];
         list.concat(gbList || []).forEach(c => { if (c && c.url && !seen[c.url]) {
@@ -885,13 +954,13 @@ function BookModal({ onClose, onSave, initial }) {
                 React.createElement("input", { className: "lex-field", autoFocus: true, value: title, onChange: (e) => { setPicked(false); setTitle(e.target.value); }, placeholder: "tytu\u0142 \u2014 zacznij pisa\u0107, podpowiem", style: { fontSize: 16, fontWeight: 700, padding: "12px 13px" } }),
                 searching && React.createElement("div", { style: { fontSize: 12, color: C.inkSoft, marginTop: 6, fontWeight: 600 } }, "szukam\u2026"),
                 sugs.length > 0 && (React.createElement("div", { className: "lex-sug" }, sugs.map((s, i) => (React.createElement("div", { key: i, className: "lex-sug-item", onClick: () => pick(s) },
-                    s.coverId
-                        ? React.createElement("img", { src: "https://covers.openlibrary.org/b/id/" + s.coverId + "-S.jpg", alt: "", style: { width: 30, height: 44, objectFit: "cover", borderRadius: 2, flexShrink: 0 } })
+                    s.thumb
+                        ? React.createElement("img", { src: s.thumb, alt: "", style: { width: 30, height: 44, objectFit: "cover", borderRadius: 2, flexShrink: 0 } })
                         : React.createElement("div", { style: { width: 30, height: 44, borderRadius: 2, background: bookColor(s.title), flexShrink: 0 } }),
                     React.createElement("div", { style: { minWidth: 0 } },
                         React.createElement("div", { style: { fontSize: 14, fontWeight: 700, lineHeight: 1.2 } }, s.title),
                         s.author && React.createElement("div", { style: { fontSize: 12, color: C.inkSoft } }, s.author))))))),
-                React.createElement("input", { className: "lex-field", value: author, onChange: (e) => setAuthor(e.target.value), placeholder: "autor", style: { fontSize: 15, padding: "11px 13px", marginTop: 8 } }),
+                React.createElement("input", { className: "lex-field", value: author, onChange: (e) => { setPicked(false); setAuthor(e.target.value); }, placeholder: "autor \u2014 te\u017C podpowiem", style: { fontSize: 15, padding: "11px 13px", marginTop: 8 } }),
                 loadingCovers && React.createElement("div", { style: { fontSize: 12, color: C.inkSoft, marginTop: 10, fontWeight: 600 } }, "\u0142aduj\u0119 ok\u0142adki\u2026"),
                 React.createElement("div", { style: { marginTop: 12 } },
                     React.createElement("div", { style: { fontSize: 11, letterSpacing: ".1em", color: C.inkSoft, fontWeight: 700, marginBottom: 6 } }, "ok\u0142adka \u2014 wybierz wydanie"),
