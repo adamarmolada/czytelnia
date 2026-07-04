@@ -57,15 +57,16 @@ const LEX_CSS = `
 @keyframes lexRainbow{from{filter:hue-rotate(0deg);}to{filter:hue-rotate(360deg);}}
 .lex-aside{position:relative;transform:none;transition:transform .25s ease;} .lex-overlay{display:none;} .lex-menu{display:none;}
 @media (max-width:767px){ .lex-aside{position:fixed;top:0;left:0;height:100%;transform:translateX(-100%);box-shadow:2px 0 24px #0004;} .lex-aside.open{transform:translateX(0);} .lex-overlay{display:block;} .lex-menu{display:inline-flex;} }
-.lex-book3d{cursor:pointer;}
-.lex-book3d-rot{transform:rotateY(-24deg);transition:transform .18s ease;}
-.lex-book3d:hover .lex-book3d-rot{transform:rotateY(-30deg) translateY(-3px);}
-.lex-book{border-radius:2px 4px 4px 2px;box-shadow:1px 2px 6px rgba(11,11,10,.28);background-size:cover;background-position:center;overflow:hidden;}
-.lex-book::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(to right,rgba(0,0,0,.4),rgba(0,0,0,0));}
-.lex-book.sel{box-shadow:0 0 0 3px ${C.lime},2px 4px 10px rgba(11,11,10,.3);}
+.lex-book3d{cursor:pointer;position:relative;}
+.lex-book3d-rot{transform:rotateY(38deg);transition:transform .18s ease;}
+.lex-book3d:hover .lex-book3d-rot{transform:rotateY(32deg) translateY(-3px);}
+.lex-book-glow{position:absolute;left:50%;bottom:-2px;width:135%;height:40%;transform:translateX(-50%);background:radial-gradient(ellipse at center, #B6EA4D 0%, #A6E22B 34%, rgba(166,226,43,0) 72%);filter:blur(2.5px);opacity:.9;pointer-events:none;}
+.lex-book{border-radius:2px 4px 4px 2px;background-size:cover;background-position:center;overflow:hidden;}
+.lex-book::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:linear-gradient(to right,rgba(0,0,0,.45),rgba(0,0,0,0));z-index:1;}
+.lex-book.sel{outline:3px solid ${C.ink};outline-offset:2px;}
 .lex-book-title{position:absolute;inset:0;padding:8px 8px 8px 11px;color:#fff;font-size:11px;font-weight:800;line-height:1.22;overflow:hidden;text-shadow:0 1px 3px rgba(0,0,0,.6);background:linear-gradient(160deg,rgba(0,0,0,.15),rgba(0,0,0,.45));}
-.lex-book-x{position:absolute;top:-7px;right:-7px;width:22px;height:22px;border-radius:50%;border:2px solid ${C.shelf};background:${C.ink};color:#fff;font-size:13px;line-height:1;cursor:pointer;align-items:center;justify-content:center;}
-.lex-book-edit{position:absolute;top:-7px;left:-7px;width:22px;height:22px;border-radius:50%;border:2px solid ${C.shelf};background:${C.ink};color:#fff;font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+.lex-book-x{position:absolute;top:-7px;right:-7px;z-index:5;width:22px;height:22px;border-radius:50%;border:2px solid ${C.shelf};background:${C.ink};color:#fff;font-size:13px;line-height:1;cursor:pointer;align-items:center;justify-content:center;}
+.lex-book-edit{position:absolute;top:-7px;left:-7px;z-index:5;width:22px;height:22px;border-radius:50%;border:2px solid ${C.shelf};background:${C.ink};color:#fff;font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;}
 .lex-addtile{border:2px dashed ${C.ink};background:transparent;color:${C.ink};border-radius:4px;cursor:pointer;font-size:26px;font-weight:800;display:flex;align-items:center;justify-content:center;transition:background .12s ease;}
 .lex-addtile:hover{background:rgba(0,0,0,.06);}
 .lex-modal-bg{position:fixed;inset:0;background:#0009;z-index:60;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;}
@@ -111,7 +112,7 @@ function saveLocal(lib) { try {
 }
 catch { } }
 function cambridgeUrl(w) { return "https://dictionary.cambridge.org/dictionary/english/" + encodeURIComponent(String(w || "").trim().toLowerCase().replace(/\s+/g, "-")); }
-function normEntry(e) { return { id: e.id || uid(), word: e.word || "", queried: e.queried || e.word || "", ipa: e.ipa || "", pos: e.pos || "", pl: e.pl || "", alts: Array.isArray(e.alts) ? e.alts : [], level: e.level || "", note: e.note || "", definition: e.definition || "", sentence: e.sentence || "", sentencePl: e.sentencePl || "", exampleAlts: Array.isArray(e.exampleAlts) ? e.exampleAlts : [], audio: e.audio || "", fromBook: !!e.fromBook, phrase: !!e.phrase, source: e.source || "", createdAt: e.createdAt || Date.now() }; }
+function normEntry(e) { return { id: e.id || uid(), word: e.word || "", queried: e.queried || e.word || "", ipa: e.ipa || "", pos: e.pos || "", pl: e.pl || "", alts: Array.isArray(e.alts) ? e.alts : [], level: e.level || "", note: e.note || "", definition: e.definition || "", lemma: e.lemma || "", lemmaKind: e.lemmaKind || "", sentence: e.sentence || "", sentencePl: e.sentencePl || "", exampleAlts: Array.isArray(e.exampleAlts) ? e.exampleAlts : [], audio: e.audio || "", fromBook: !!e.fromBook, phrase: !!e.phrase, source: e.source || "", createdAt: e.createdAt || Date.now() }; }
 function migrate(lib) {
     if (!lib || typeof lib !== "object")
         lib = {};
@@ -297,7 +298,30 @@ async function fetchDict(word) {
             const uk = wa.find(p => /-uk\.mp3$/i.test(p.audio));
             audio = (us || uk || wa[0] || {}).audio || "";
         }
-        return { ipa, pos, example: examples[0] || "", examples: examples, defs: defs.slice(0, 12), audio };
+        let lemma = "", lemmaKind = "";
+        const w0 = word.toLowerCase().trim();
+        const kinds = [
+            [/(?:simple\s+)?past\s+(?:tense|participle)\s+(?:and\s+past\s+participle\s+)?of\s+(?:the\s+(?:verb|word)\s+)?["']?([a-z][a-z'\-]+)/i, "forma czasu przeszłego"],
+            [/present\s+participle\s+of\s+(?:the\s+verb\s+)?["']?([a-z][a-z'\-]+)/i, "imiesłów czynny"],
+            [/past\s+participle\s+of\s+(?:the\s+verb\s+)?["']?([a-z][a-z'\-]+)/i, "imiesłów bierny"],
+            [/third[\s-]person\s+singular[^.]*?\s+of\s+(?:the\s+verb\s+)?["']?([a-z][a-z'\-]+)/i, "3. os. l.poj."],
+            [/plural\s+(?:form\s+)?of\s+(?:the\s+(?:noun|word)\s+)?["']?([a-z][a-z'\-]+)/i, "liczba mnoga"],
+            [/comparative\s+(?:form\s+|degree\s+)?of\s+["']?([a-z][a-z'\-]+)/i, "stopień wyższy"],
+            [/superlative\s+(?:form\s+|degree\s+)?of\s+["']?([a-z][a-z'\-]+)/i, "stopień najwyższy"]
+        ];
+        for (const dd of defs) {
+            for (const [re, label] of kinds) {
+                const m = re.exec(dd.definition);
+                if (m && m[1] && m[1].toLowerCase() !== w0) {
+                    lemma = m[1].toLowerCase();
+                    lemmaKind = label;
+                    break;
+                }
+            }
+            if (lemma)
+                break;
+        }
+        return { ipa, pos, example: examples[0] || "", examples: examples, defs: defs.slice(0, 12), audio, lemma, lemmaKind };
     }
     catch {
         return {};
@@ -385,7 +409,7 @@ async function lookupWord({ word, sentence }) {
     }
     alts = alts.filter(a => a.toLowerCase() !== pl.toLowerCase()).slice(0, 5);
     const pos = isPhrase ? phraseKind(clean) : (dict.pos ? (POS_PL[dict.pos] || dict.pos) : "");
-    return { id: uid(), word: clean, queried: clean, ipa: dict.ipa || "", pos: pos, pl: pl, alts: alts, level: info.level || "", note: "", sentence: src, sentencePl, exampleAlts: exampleAlts, audio: dict.audio || "", fromBook: !!hasSentence, createdAt: Date.now(), phrase: isPhrase };
+    return { id: uid(), word: clean, queried: clean, ipa: dict.ipa || "", pos: pos, pl: pl, alts: alts, level: info.level || "", note: "", lemma: dict.lemma || "", lemmaKind: dict.lemmaKind || "", sentence: src, sentencePl, exampleAlts: exampleAlts, audio: dict.audio || "", fromBook: !!hasSentence, createdAt: Date.now(), phrase: isPhrase };
 }
 async function olSearch(q) {
     try {
@@ -558,6 +582,8 @@ function SpeakerBtn({ entry, size }) {
 }
 function Entry({ e, onDelete, onEdit, onPickAlt, onPickExample }) {
     const cam = cambridgeUrl(e.word);
+    const [showAlts, setShowAlts] = useState(false);
+    const hasAlts = e.exampleAlts && e.exampleAlts.length > 0;
     return (React.createElement("article", { className: "lex-entry", style: { padding: "20px 2px", borderBottom: `1px solid ${C.line}` } },
         React.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } },
             React.createElement("a", { href: cam, target: "_blank", rel: "noopener noreferrer", title: "otw\u00F3rz definicj\u0119 w Cambridge Dictionary", style: { fontSize: 26, fontWeight: 700, letterSpacing: "-.02em", color: C.ink, textDecoration: "none", borderBottom: `2px solid ${C.lime}`, lineHeight: 1.15, wordBreak: "break-word" } }, e.word),
@@ -569,6 +595,9 @@ function Entry({ e, onDelete, onEdit, onPickAlt, onPickExample }) {
             e.ipa && React.createElement("span", { style: { fontSize: 13.5, color: C.inkSoft } }, e.ipa),
             e.pos && React.createElement("span", { style: { fontSize: 13.5, color: C.olive, fontWeight: 700 } }, e.pos.toLowerCase()),
             e.level && React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: "#fff", background: levelColor(e.level), borderRadius: 5, padding: "2px 6px", letterSpacing: ".04em" } }, e.level)),
+        e.lemma && React.createElement("div", { style: { marginTop: 6, fontSize: 13, color: C.inkSoft } },
+            React.createElement("span", { style: { color: C.olive, fontWeight: 700 } }, (e.lemmaKind || "forma") + " od "),
+            React.createElement("a", { href: cambridgeUrl(e.lemma), target: "_blank", rel: "noopener noreferrer", style: { color: C.ink, fontWeight: 800, textDecoration: "none", borderBottom: `1.5px solid ${C.lime}` } }, e.lemma)),
         React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 7 } },
             React.createElement("span", { style: { fontSize: 21, fontWeight: 700, color: C.ink } }, e.pl),
             e.alts && e.alts.length > 0 && e.alts.map((a, i) => (React.createElement("button", { key: i, onClick: () => onPickAlt && onPickAlt(e.id, a), className: "lex-primary", title: "ustaw jako g\u0142\u00F3wne t\u0142umaczenie", style: { border: `1px solid ${C.line}`, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 12.5, padding: "2px 9px", borderRadius: 14, cursor: "pointer" } }, a)))),
@@ -577,13 +606,59 @@ function Entry({ e, onDelete, onEdit, onPickAlt, onPickExample }) {
             React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } },
                 React.createElement("span", { style: { width: 7, height: 7, borderRadius: 7, background: e.fromBook ? C.lime : "#A7B190" } }),
                 React.createElement("span", { style: { fontSize: 11, letterSpacing: ".08em", color: C.inkSoft, fontWeight: 700 } }, e.fromBook ? "z książki" : "przykład użycia")),
-            React.createElement("p", { style: { margin: 0, fontStyle: "italic", fontSize: 19, lineHeight: 1.5, color: C.ink, fontWeight: 500 } },
+            React.createElement("p", { style: { margin: 0, fontStyle: "italic", fontSize: 15, lineHeight: 1.5, color: C.ink, fontWeight: 500 } },
                 React.createElement(MarkWord, { text: e.sentence, word: e.queried })),
-            e.sentencePl && React.createElement("p", { style: { margin: "7px 0 0", fontSize: 15, lineHeight: 1.5, color: C.inkSoft } }, e.sentencePl),
-            e.exampleAlts && e.exampleAlts.length > 0 && (React.createElement("div", { style: { marginTop: 9 } },
-                React.createElement("div", { style: { fontSize: 11, color: C.inkSoft, fontWeight: 700, marginBottom: 5 } }, "inne przyk\u0142ady \u2014 dotknij, by u\u017Cy\u0107:"),
-                React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5 } }, e.exampleAlts.map((a, i) => (React.createElement("button", { key: i, onClick: () => onPickExample && onPickExample(e.id, a), style: { textAlign: "left", border: `1px solid ${C.line}`, background: "#fff", color: C.ink, fontStyle: "italic", fontSize: 14, lineHeight: 1.45, padding: "7px 10px", borderRadius: 9, cursor: "pointer" } }, a)))))))),
+            e.sentencePl && React.createElement("p", { style: { margin: "6px 0 0", fontSize: 13, lineHeight: 1.5, color: C.inkSoft } }, e.sentencePl),
+            hasAlts && (React.createElement("div", { style: { marginTop: 9 } },
+                React.createElement("button", { onClick: () => setShowAlts(v => !v), className: "lex-primary", style: { border: "none", background: "transparent", color: C.olive, fontWeight: 700, fontSize: 12, padding: "2px 0", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 } },
+                    React.createElement("span", { style: { transform: showAlts ? "rotate(90deg)" : "none", transition: "transform .15s ease", display: "inline-block" } }, "\u25B8"),
+                    showAlts ? "ukryj inne przyk\u0142ady" : "inne przyk\u0142ady (" + e.exampleAlts.length + ")"),
+                showAlts && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5, marginTop: 6 } }, e.exampleAlts.map((a, i) => (React.createElement("button", { key: i, onClick: () => { onPickExample && onPickExample(e.id, a); setShowAlts(false); }, style: { textAlign: "left", border: `1px solid ${C.line}`, background: "#fff", color: C.ink, fontStyle: "italic", fontSize: 13.5, lineHeight: 1.45, padding: "7px 10px", borderRadius: 9, cursor: "pointer" } }, a)))))))),
         e.note && React.createElement("p", { style: { margin: "8px 0 0", fontSize: 13.5, color: C.inkSoft, lineHeight: 1.5 } }, e.note)));
+}
+const _edgeCache = {};
+function sampleEdgeColor(url) {
+    if (!url)
+        return Promise.resolve(null);
+    if (_edgeCache[url])
+        return Promise.resolve(_edgeCache[url]);
+    return new Promise(function (res) {
+        const im = new Image();
+        im.crossOrigin = "anonymous";
+        im.onload = function () {
+            try {
+                const cw = 12, ch = 40;
+                const c = document.createElement("canvas");
+                c.width = cw;
+                c.height = ch;
+                const ctx = c.getContext("2d");
+                ctx.drawImage(im, 0, 0, cw, ch);
+                const d = ctx.getImageData(0, 0, 3, ch).data;
+                let r = 0, g = 0, b = 0, n = 0;
+                for (let i = 0; i < d.length; i += 4) {
+                    r += d[i];
+                    g += d[i + 1];
+                    b += d[i + 2];
+                    n++;
+                }
+                const col = "rgb(" + Math.round(r / n) + "," + Math.round(g / n) + "," + Math.round(b / n) + ")";
+                _edgeCache[url] = col;
+                res(col);
+            }
+            catch (e) {
+                res(null);
+            }
+        };
+        im.onerror = function () { res(null); };
+        im.src = url;
+    });
+}
+function darken(rgb, f) {
+    const m = /rgb\((\d+),(\d+),(\d+)\)/.exec(rgb || "");
+    if (!m)
+        return rgb;
+    const d = function (v) { return Math.max(0, Math.round(v * f)); };
+    return "rgb(" + d(+m[1]) + "," + d(+m[2]) + "," + d(+m[3]) + ")";
 }
 function BookThumb({ book, w, sel }) {
     const width = w || 66;
@@ -591,15 +666,28 @@ function BookThumb({ book, w, sel }) {
     const count = (book.entries && book.entries.length) || 0;
     const pages = book.pages || 0;
     const thick = pages > 0
-        ? Math.max(5, Math.min(20, Math.round(pages / 38)))
-        : Math.max(4, Math.min(15, 3 + count * 0.7));
-    const back = book.cover ? "#9a9a90" : bookColor(book.title || "");
-    return (React.createElement("div", { className: "lex-book3d", style: { width: width, height: height, perspective: 480 } },
+        ? Math.max(9, Math.min(30, Math.round(pages / 26)))
+        : Math.max(8, Math.min(22, 6 + count * 0.9));
+    const fallback = bookColor(book.title || "");
+    const [spineCol, setSpineCol] = useState(book.cover ? null : fallback);
+    useEffect(function () {
+        let ok = true;
+        if (book.cover) {
+            sampleEdgeColor(book.cover).then(function (c) { if (ok)
+                setSpineCol(c || fallback); });
+        }
+        else
+            setSpineCol(fallback);
+        return function () { ok = false; };
+    }, [book.cover]);
+    const spine = spineCol || fallback;
+    return (React.createElement("div", { className: "lex-book3d", style: { width: width, height: height + 10, perspective: 620, display: "flex", alignItems: "flex-end", justifyContent: "center" } },
+        React.createElement("div", { className: "lex-book-glow" }),
         React.createElement("div", { className: "lex-book3d-rot", style: { position: "relative", width: width, height: height, transformStyle: "preserve-3d" } },
-            React.createElement("div", { className: "lex-book" + (sel ? " sel" : ""), style: { position: "absolute", inset: 0, backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? "#e6e6df" : bookColor(book.title || "") } },
-                !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)),
-            React.createElement("div", { title: pages ? pages + " stron" : count + " słów", style: { position: "absolute", top: 2, left: width, width: thick, height: height - 4, transformOrigin: "left center", transform: "rotateY(90deg)", background: "repeating-linear-gradient(to bottom, #F7F5EA, #F7F5EA 2px, #D9D6C4 2px, #D9D6C4 3px)", boxShadow: "inset 2px 0 3px rgba(0,0,0,.22)" } }),
-            React.createElement("div", { style: { position: "absolute", inset: 0, background: back, borderRadius: "2px 4px 4px 2px", transform: "translateZ(-" + thick + "px)", boxShadow: "6px 8px 14px rgba(11,11,10,.32)" } }))));
+            React.createElement("div", { className: "lex-book" + (sel ? " sel" : ""), style: { position: "absolute", inset: 0, backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? "#e6e6df" : fallback } }, !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)),
+            React.createElement("div", { title: book.title, style: { position: "absolute", top: 0, left: 0, width: thick, height: height, transformOrigin: "left center", transform: "rotateY(-90deg)", background: spine, borderRadius: "3px 0 0 3px", boxShadow: "inset -3px 0 6px rgba(0,0,0,.28), inset 2px 0 3px rgba(255,255,255,.18)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" } }, React.createElement("div", { style: { transform: "rotate(90deg)", whiteSpace: "nowrap", fontSize: Math.max(7, Math.min(10, thick * 0.55)), fontWeight: 800, color: "#fff", textShadow: "0 1px 2px rgba(0,0,0,.6)", maxWidth: height - 8, overflow: "hidden", textOverflow: "ellipsis", letterSpacing: ".02em" } }, book.title)),
+            React.createElement("div", { title: pages ? pages + " stron" : count + " słów", style: { position: "absolute", top: 2, left: width, width: thick, height: height - 4, transformOrigin: "left center", transform: "rotateY(90deg)", background: "repeating-linear-gradient(to bottom, #F7F5EA, #F7F5EA 2px, #D9D6C4 2px, #D9D6C4 3px)", boxShadow: "inset 2px 0 3px rgba(0,0,0,.18)" } }),
+            React.createElement("div", { style: { position: "absolute", inset: 0, background: darken(spine, 0.72), borderRadius: "2px 4px 4px 2px", transform: "translateZ(-" + thick + "px)" } }))));
 }
 function fileToDataURL(file) { return new Promise(function (res, rej) { const r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = function () { rej(new Error("read")); }; r.readAsDataURL(file); }); }
 function loadImg(src) { return new Promise(function (res, rej) { const im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej(new Error("img")); }; im.src = src; }); }
@@ -888,6 +976,8 @@ function EntryEdit({ entry, onClose, onSave }) {
                 patch.audio = "";
                 patch.pos = phraseKind(w2);
                 patch.level = "";
+                patch.lemma = "";
+                patch.lemmaKind = "";
             }
             else {
                 try {
@@ -896,6 +986,8 @@ function EntryEdit({ entry, onClose, onSave }) {
                     patch.audio = (d && d.audio) || "";
                     patch.pos = (d && d.pos) ? (POS_PL[d.pos] || d.pos) : "";
                     patch.level = (info && info.level) || "";
+                    patch.lemma = (d && d.lemma) || "";
+                    patch.lemmaKind = (d && d.lemmaKind) || "";
                 }
                 catch (e) { }
             }
@@ -944,6 +1036,7 @@ function App() {
     const [syncState, setSyncState] = useState(SYNC_ON ? "łączę…" : "tylko to urządzenie");
     const [word, setWord] = useState("");
     const [sentence, setSentence] = useState("");
+    const [sentOpen, setSentOpen] = useState(false);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const [sug, setSug] = useState([]);
@@ -1184,16 +1277,16 @@ function App() {
                     React.createElement("span", { className: "lex-spark" + (syncBusy ? " sync" : ""), title: syncTitle, style: { fontSize: 19, lineHeight: 1, opacity: syncOff ? 0.4 : 1 } }, syncGlyph))),
             React.createElement("div", { style: { padding: "4px 12px 16px", flex: 1 } },
                 React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } },
+                    React.createElement("div", { key: "__add", style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
+                        React.createElement("button", { className: "lex-addtile", onClick: () => setShowAdd(true), style: { width: 66, height: 94 } }, "+"),
+                        React.createElement("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.shelfMute } }, "dodaj")),
                     books.slice().sort((a, b) => (b.touchedAt || 0) - (a.touchedAt || 0)).map(b => (React.createElement("div", { key: b.id, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
                         React.createElement("div", { style: { position: "relative" } },
                             React.createElement("div", { onClick: () => cellClick(b.id), onContextMenu: (e) => { e.preventDefault(); setRevealId(b.id); }, style: { touchAction: "manipulation" } },
                                 React.createElement(BookThumb, { book: b, sel: b.id === activeId })),
                             revealId === b.id && React.createElement("button", { className: "lex-book-x", style: { display: "flex" }, onClick: (e) => { e.stopPropagation(); setRevealId(null); deleteBook(b.id); }, "aria-label": "usu\u0144 ksi\u0105\u017Ck\u0119" }, "\u00D7"),
                             revealId === b.id && React.createElement("button", { className: "lex-book-edit", onClick: (e) => { e.stopPropagation(); setRevealId(null); setEditBook(b); }, "aria-label": "edytuj ksi\u0105\u017Ck\u0119" }, "\u270E")),
-                        React.createElement("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.shelfText, textAlign: "center", lineHeight: 1.25, wordBreak: "break-word", width: "100%" } }, b.title)))),
-                    React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
-                        React.createElement("button", { className: "lex-addtile", onClick: () => setShowAdd(true), style: { width: 66, height: 94 } }, "+"),
-                        React.createElement("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.shelfMute } }, "dodaj"))),
+                        React.createElement("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.shelfText, textAlign: "center", lineHeight: 1.25, wordBreak: "break-word", width: "100%" } }, b.title))))),
                 loaded && books.length === 0 && React.createElement("div", { style: { padding: "14px 4px", fontSize: 13, color: C.shelfMute, lineHeight: 1.5, fontWeight: 600 } }, "brak ksi\u0105\u017Cek. dodaj pierwsz\u0105, \u017Ceby zacz\u0105\u0107 zbiera\u0107 s\u0142owa.")),
             totalCards > 0 && (React.createElement("div", { style: { padding: "14px 16px", borderTop: `1px solid ${C.shelfSoft}` } },
                 React.createElement("div", { style: { fontSize: 11, letterSpacing: ".16em", color: C.shelfMute, fontWeight: 800, marginBottom: 8 } }, "FISZKI"),
@@ -1252,7 +1345,7 @@ function App() {
                     dupNote && (React.createElement("div", { style: { marginTop: 8, fontSize: 12.5, color: C.limeDeep, fontWeight: 700 } },
                         "\u21BA ",
                         dupNote)),
-                    React.createElement("textarea", { ref: sentenceRef, value: sentence, onChange: (e) => setSentence(e.target.value), onKeyDown: onWordKey, placeholder: "zdanie z ksi\u0105\u017Cki \u2014 opcjonalnie, dla dok\u0142adnego t\u0142umaczenia", className: "lex-field", enterKeyHint: "send", style: { marginTop: 10, fontSize: 16, lineHeight: 1.6, padding: "13px 14px", minHeight: 120, resize: "vertical", fontStyle: sentence ? "italic" : "normal" } }),
+                    React.createElement("textarea", { ref: sentenceRef, value: sentence, onChange: (e) => setSentence(e.target.value), onKeyDown: onWordKey, onFocus: () => setSentOpen(true), onBlur: () => setSentOpen(false), placeholder: "zdanie z ksi\u0105\u017Cki \u2014 opcjonalnie, dla dok\u0142adnego t\u0142umaczenia", className: "lex-field", enterKeyHint: "send", rows: 1, style: { marginTop: 10, fontSize: 16, lineHeight: 1.6, padding: "13px 14px", minHeight: (sentOpen || sentence) ? 120 : 50, height: (sentOpen || sentence) ? undefined : 50, resize: "vertical", overflow: "hidden", transition: "min-height .18s ease", fontStyle: sentence ? "italic" : "normal" } }),
                     React.createElement("button", { onClick: submit, disabled: !word.trim() || busy, className: "lex-send", style: { width: "100%", height: 52, marginTop: 12, borderRadius: 14, border: "none", background: C.lime, color: C.ink, fontSize: 16.5, fontWeight: 800, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 } }, busy ? "tłumaczę…" : React.createElement(React.Fragment, null,
                         "t\u0142umacz ",
                         React.createElement("span", { style: { fontSize: 19, lineHeight: 1, marginTop: -1 } }, "\u2192"))))))),
