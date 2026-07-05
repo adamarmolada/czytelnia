@@ -108,6 +108,7 @@ const FIREBASE_CONFIG = {
 const SYNC_ID = "lib-7Qx2r9v";
 const SYNC_ON = String(FIREBASE_CONFIG.apiKey).indexOf("WKLEJ") === -1;
 const LKEY = "czytelnia:library";
+const AKEY = "czytelnia:active";
 function loadLocal() { try {
     const v = localStorage.getItem(LKEY);
     return v ? JSON.parse(v) : null;
@@ -841,14 +842,14 @@ function Entry({ e, onDelete, onEdit, onPickAlt, onPickExample, onWord }) {
                 React.createElement("button", { onClick: () => onDelete(e.id), "aria-label": "usu\u0144 has\u0142o", className: "lex-icon-btn", style: { border: "none", background: "transparent", color: C.inkSoft, opacity: .45, fontSize: 12.5, padding: 4, cursor: "pointer" } }, "usu\u0144"))),
         React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 7, marginTop: 4 } },
             e.ipa && React.createElement("span", { style: { fontSize: 13, color: C.inkSoft } }, e.ipa),
-            e.pos && React.createElement("span", { style: { fontSize: 13, color: C.olive, fontWeight: 700 } }, e.pos.toLowerCase()),
+            e.pos && React.createElement("span", { style: { fontSize: 13, color: C.olive, fontWeight: 400 } }, e.pos.toLowerCase()),
             e.level && React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: "#fff", background: levelColor(e.level), borderRadius: 5, padding: "2px 6px", letterSpacing: ".04em" } }, e.level)),
         e.lemma && React.createElement("div", { style: { marginTop: 4, fontSize: 12.5, color: C.inkSoft } },
             React.createElement("span", { style: { color: C.inkSoft, fontWeight: 400 } }, shortKind(e.lemmaKind) + " od "),
-            React.createElement("span", { onClick: () => onWord && onWord(e.lemma, null), title: "poka\u017C definicj\u0119 (bez reklam)", style: { color: C.ink, fontWeight: 800, textDecoration: "none", borderBottom: `1.5px solid ${C.lime}`, cursor: "pointer" } }, e.lemma)),
+            React.createElement("span", { onClick: () => onWord && onWord(e.lemma, null), title: "poka\u017C definicj\u0119 (bez reklam)", style: { color: C.ink, fontWeight: 400, textDecoration: "none", borderBottom: `1.5px solid ${C.lime}`, cursor: "pointer" } }, e.lemma)),
         React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 7, marginTop: 5 } },
-            React.createElement("span", { style: { fontSize: 19, fontWeight: 700, color: C.ink } }, e.pl),
-            e.alts && e.alts.length > 0 && e.alts.map((a, i) => (React.createElement("button", { key: i, onClick: () => onPickAlt && onPickAlt(e.id, a), className: "lex-primary", title: "ustaw jako g\u0142\u00F3wne t\u0142umaczenie", style: { border: `1px solid ${C.line}`, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 12, padding: "2px 8px", borderRadius: 14, cursor: "pointer" } }, a)))),
+            React.createElement("span", { style: { fontSize: 17, fontWeight: 400, color: C.limeDeep } }, e.pl),
+            e.alts && e.alts.length > 0 && e.alts.map((a, i) => (React.createElement("button", { key: i, onClick: () => onPickAlt && onPickAlt(e.id, a), className: "lex-primary", title: "ustaw jako g\u0142\u00F3wne t\u0142umaczenie", style: { border: `1px solid ${C.line}`, background: "#fff", color: C.olive, fontWeight: 400, fontSize: 12, padding: "2px 8px", borderRadius: 14, cursor: "pointer" } }, a)))),
         e.definition && React.createElement("p", { style: { margin: "5px 0 0", fontSize: 13, color: C.inkSoft, lineHeight: 1.45, fontStyle: "italic" } }, e.definition),
         e.sentence && (React.createElement("div", { style: { marginTop: 10, borderLeft: `3px solid ${e.fromBook ? C.lime : "#A7B190"}`, paddingLeft: 12 } },
             React.createElement("p", { style: { margin: 0, fontStyle: "italic", fontSize: 14, lineHeight: 1.5, color: C.ink, fontWeight: 500 } },
@@ -1460,10 +1461,20 @@ function App() {
         booksRef.current = lib.books;
         poolRef.current = lib.pool;
         stampRef.current = lib.updatedAt || 0;
-        if (lib.books.length)
-            setActiveId(lib.books[0].id);
+        if (lib.books.length) {
+            let sa = "";
+            try { sa = localStorage.getItem(AKEY) || ""; }
+            catch (e) { }
+            setActiveId((sa && lib.books.some(b => b.id === sa)) ? sa : lib.books[0].id);
+        }
         setLoaded(true);
     }, []);
+    useEffect(() => { if (activeId) {
+        try {
+            localStorage.setItem(AKEY, activeId);
+        }
+        catch (e) { }
+    } }, [activeId]);
     useEffect(() => {
         if (!SYNC_ON)
             return;
