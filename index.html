@@ -36,12 +36,13 @@ const C = {
     shelf: "#8ACE00", shelfSoft: "#7BB900", shelfText: "#0B0B0A", shelfMute: "#33420C",
     lime: "#8ACE00", limeDeep: "#6FA800", olive: "#3E5400", line: "#D2DEB6", danger: "#C2381F", mark: "#FF5FA2",
 };
+const SHELF_BG = "linear-gradient(135deg, rgba(255,182,214,.20) 0%, rgba(255,214,170,.13) 18%, rgba(210,235,180,.15) 38%, rgba(170,220,240,.20) 60%, rgba(206,190,245,.22) 82%, rgba(255,190,225,.17) 100%), linear-gradient(160deg, #EEF1F4 0%, #E7E8EE 55%, #EBE7F1 100%)";
 const LEX_CSS = `
 *{box-sizing:border-box;}
 .lex-root{font-family:Arial,Helvetica,"Helvetica Neue",sans-serif;color:${C.ink};-webkit-font-smoothing:antialiased;height:100vh;height:100dvh;}
 .lex-scroll::-webkit-scrollbar{width:10px;} .lex-scroll::-webkit-scrollbar-thumb{background:${C.line};border-radius:8px;border:3px solid ${C.paper};}
 .lex-scroll{scrollbar-width:thin;scrollbar-color:${C.line} transparent;}
-.lex-shelf-scroll::-webkit-scrollbar{width:8px;} .lex-shelf-scroll::-webkit-scrollbar-thumb{background:${C.shelfSoft};border-radius:8px;}
+.lex-shelf-scroll::-webkit-scrollbar{width:8px;} .lex-shelf-scroll::-webkit-scrollbar-thumb{background:rgba(120,120,140,.35);border-radius:8px;}
 .lex-field{width:100%;background:#F6F8EE;border:1px solid ${C.line};border-radius:12px;color:${C.ink};font-family:inherit;outline:none;transition:border-color .15s ease,box-shadow .15s ease;}
 .lex-field:focus{border-color:${C.lime};box-shadow:0 0 0 3px rgba(138,206,0,.3);}
 .lex-field::placeholder{color:${C.inkSoft};opacity:.6;}
@@ -783,12 +784,15 @@ function BookThumb({ book, w, sel }) {
         return function () { ok = false; };
     }, [book.cover, manual]);
     const spine = spineCol || fallback;
+    const shadeRaw = book.spineShade || darken(spine, 0.8);
+    const sc = toRGB(shadeRaw);
+    const shadeSoft = sc ? ("rgba(" + sc[0] + "," + sc[1] + "," + sc[2] + ",.55)") : "rgba(0,0,0,.4)";
     const totalW = width + thick;
     return (React.createElement("div", { className: "lex-book3d", style: { width: totalW, height: height + 20, position: "relative", perspective: 640, display: "flex", alignItems: "flex-end", justifyContent: "center" } },
         React.createElement("div", { className: "lex-book3d-rot", style: { position: "relative", width: totalW, height: height, transformStyle: "preserve-3d" } },
             React.createElement("div", { title: pages ? pages + " stron" : count + " słów", style: { position: "absolute", top: 0, left: thick, width: thick, height: height, transformOrigin: "left center", transform: "rotateY(90deg)", backgroundImage: `linear-gradient(to right, ${lighten(spine, 0.5)} 0%, ${lighten(spine, 0.16)} 16%, ${spine} 55%, ${book.spineShade || darken(spine, 0.8)} 100%)`, borderRadius: "0 2px 2px 0" } }),
             sel && React.createElement("div", { "aria-hidden": true, style: { position: "absolute", top: -19, left: thick + width * 0.24, width: 13, height: 42, background: C.mark, transform: "translateZ(-1px) rotate(-7deg)", clipPath: "polygon(0% 0%, 50% 24%, 100% 0%, 100% 100%, 0% 100%)", boxShadow: "1px 1px 2px rgba(0,0,0,.25)" } }),
-            React.createElement("div", { className: "lex-book", style: { position: "absolute", top: 0, left: thick, width: width, height: height, borderRadius: "1px 3px 3px 1px", backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? spine : fallback, backgroundSize: book.cover ? "contain" : "auto", backgroundRepeat: "no-repeat", backgroundPosition: "center", boxShadow: "inset 1.5px 0 0 rgba(255,255,255,.28)" } }, !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)))));
+            React.createElement("div", { className: "lex-book", style: { position: "absolute", top: 0, left: thick, width: width, height: height, borderRadius: "1px 3px 3px 1px", backgroundImage: book.cover ? `url(${book.cover})` : "none", backgroundColor: book.cover ? spine : fallback, backgroundSize: book.cover ? "contain" : "auto", backgroundRepeat: "no-repeat", backgroundPosition: "center", boxShadow: "inset 1.5px 0 0 rgba(255,255,255,.28), inset -10px 0 13px -6px " + shadeSoft } }, !book.cover && React.createElement("div", { className: "lex-book-title" }, book.title)))));
 }
 function fileToDataURL(file) { return new Promise(function (res, rej) { const r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = function () { rej(new Error("read")); }; r.readAsDataURL(file); }); }
 function loadImg(src) { return new Promise(function (res, rej) { const im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej(new Error("img")); }; im.src = src; }); }
@@ -1422,7 +1426,7 @@ function App() {
     return (React.createElement("div", { className: "lex-root", style: { display: "flex", background: C.paper, overflow: "hidden" } },
         React.createElement("style", null, LEX_CSS),
         sidebarOpen && React.createElement("div", { onClick: () => setSidebarOpen(false), className: "lex-overlay", style: { position: "fixed", inset: 0, background: "#0007", zIndex: 30 } }),
-        React.createElement("aside", { className: "lex-aside lex-shelf-scroll" + (sidebarOpen ? " open" : ""), style: { width: 280, flexShrink: 0, background: C.shelf, color: C.shelfText, display: "flex", flexDirection: "column", overflowY: "auto", zIndex: 40 } },
+        React.createElement("aside", { className: "lex-aside lex-shelf-scroll" + (sidebarOpen ? " open" : ""), style: { width: 280, flexShrink: 0, background: SHELF_BG, backgroundColor: "#EAECF1", color: C.shelfText, display: "flex", flexDirection: "column", overflowY: "auto", zIndex: 40 } },
             React.createElement("div", { style: { padding: "22px 20px 12px" } },
                 React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9 } },
                     React.createElement("div", { style: { fontSize: 30, fontWeight: 900, letterSpacing: "-.04em", lineHeight: 1 } }, "czytelnia"),
@@ -1441,7 +1445,7 @@ function App() {
                             revealId === b.id && React.createElement("button", { className: "lex-book-edit", onClick: (e) => { e.stopPropagation(); setRevealId(null); setEditBook(b); }, "aria-label": "edytuj ksi\u0105\u017Ck\u0119" }, "\u270E")),
                         React.createElement("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.shelfText, textAlign: "center", lineHeight: 1.25, wordBreak: "break-word", width: "100%" } }, b.title))))),
                 loaded && books.length === 0 && React.createElement("div", { style: { padding: "14px 4px", fontSize: 13, color: C.shelfMute, lineHeight: 1.5, fontWeight: 600 } }, "brak ksi\u0105\u017Cek. dodaj pierwsz\u0105, \u017Ceby zacz\u0105\u0107 zbiera\u0107 s\u0142owa.")),
-            totalCards > 0 && (React.createElement("div", { style: { padding: "14px 16px", borderTop: `1px solid ${C.shelfSoft}` } },
+            totalCards > 0 && (React.createElement("div", { style: { padding: "14px 16px", borderTop: `1px solid rgba(11,11,10,.1)` } },
                 React.createElement("div", { style: { fontSize: 11, letterSpacing: ".16em", color: C.shelfMute, fontWeight: 800, marginBottom: 8 } }, "FISZKI"),
                 React.createElement("button", { onClick: () => { setShowCardsAll(true); setSidebarOpen(false); }, className: "lex-primary", style: { width: "100%", border: "none", background: C.ink, color: "#fff", fontWeight: 800, fontSize: 13, padding: "11px", borderRadius: 11, cursor: "pointer" } },
                     "\uD83C\uDFB4 ze wszystkich ksi\u0105\u017Cek (",
