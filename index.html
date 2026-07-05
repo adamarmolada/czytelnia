@@ -37,6 +37,8 @@ const C = {
     lime: "#8ACE00", limeDeep: "#6FA800", olive: "#3E5400", line: "#D2DEB6", danger: "#C2381F", mark: "#FF5FA2",
 };
 const SHELF_BG = "linear-gradient(135deg, rgba(255,182,214,.20) 0%, rgba(255,214,170,.13) 18%, rgba(210,235,180,.15) 38%, rgba(170,220,240,.20) 60%, rgba(206,190,245,.22) 82%, rgba(255,190,225,.17) 100%), linear-gradient(160deg, #EEF1F4 0%, #E7E8EE 55%, #EBE7F1 100%)";
+const PAGE_BG = "linear-gradient(135deg, rgba(255,182,214,.13) 0%, rgba(255,214,170,.09) 20%, rgba(210,235,180,.11) 42%, rgba(170,220,240,.14) 64%, rgba(206,190,245,.15) 84%, rgba(255,190,225,.10) 100%), linear-gradient(160deg, #EFF3E7 0%, #E9EEE0 55%, #ECE8F2 100%)";
+const PANEL_BG = "linear-gradient(135deg, rgba(255,168,212,.32) 0%, rgba(255,206,150,.20) 22%, rgba(198,236,166,.23) 45%, rgba(158,214,240,.32) 66%, rgba(206,184,248,.34) 86%, rgba(255,178,222,.24) 100%), linear-gradient(160deg, #E9EEE2 0%, #E2E8DB 55%, #E7E2EF 100%)";
 const LEX_CSS = `
 *{box-sizing:border-box;}
 .lex-root{font-family:Arial,Helvetica,"Helvetica Neue",sans-serif;color:${C.ink};-webkit-font-smoothing:antialiased;height:100vh;height:100dvh;}
@@ -276,11 +278,122 @@ async function wordInfo(word) {
     }
 }
 const POS_PL = { noun: "rzeczownik", verb: "czasownik", adjective: "przymiotnik", adverb: "przysłówek", pronoun: "zaimek", preposition: "przyimek", conjunction: "spójnik", interjection: "wykrzyknik", exclamation: "wykrzyknik", determiner: "określnik", article: "przedimek", numeral: "liczebnik" };
+const IRREGULAR = {
+"was":["be","forma czasu przeszłego"],"were":["be","forma czasu przeszłego"],"been":["be","imiesłów bierny"],
+"began":["begin","forma czasu przeszłego"],"begun":["begin","imiesłów bierny"],
+"broke":["break","forma czasu przeszłego"],"broken":["break","imiesłów bierny"],
+"brought":["bring","forma czasu przeszłego"],"built":["build","forma czasu przeszłego"],
+"bought":["buy","forma czasu przeszłego"],"caught":["catch","forma czasu przeszłego"],
+"chose":["choose","forma czasu przeszłego"],"chosen":["choose","imiesłów bierny"],
+"came":["come","forma czasu przeszłego"],"did":["do","forma czasu przeszłego"],"done":["do","imiesłów bierny"],
+"drew":["draw","forma czasu przeszłego"],"drawn":["draw","imiesłów bierny"],
+"drank":["drink","forma czasu przeszłego"],"drunk":["drink","imiesłów bierny"],
+"drove":["drive","forma czasu przeszłego"],"driven":["drive","imiesłów bierny"],
+"ate":["eat","forma czasu przeszłego"],"eaten":["eat","imiesłów bierny"],
+"fell":["fall","forma czasu przeszłego"],"fallen":["fall","imiesłów bierny"],
+"felt":["feel","forma czasu przeszłego"],"found":["find","forma czasu przeszłego"],
+"flew":["fly","forma czasu przeszłego"],"flown":["fly","imiesłów bierny"],
+"forgot":["forget","forma czasu przeszłego"],"forgotten":["forget","imiesłów bierny"],
+"got":["get","forma czasu przeszłego"],"gotten":["get","imiesłów bierny"],
+"gave":["give","forma czasu przeszłego"],"given":["give","imiesłów bierny"],
+"went":["go","forma czasu przeszłego"],"gone":["go","imiesłów bierny"],
+"grew":["grow","forma czasu przeszłego"],"grown":["grow","imiesłów bierny"],
+"had":["have","forma czasu przeszłego"],"heard":["hear","forma czasu przeszłego"],
+"held":["hold","forma czasu przeszłego"],"kept":["keep","forma czasu przeszłego"],
+"knew":["know","forma czasu przeszłego"],"known":["know","imiesłów bierny"],
+"led":["lead","forma czasu przeszłego"],"left":["leave","forma czasu przeszłego"],
+"lay":["lie","forma czasu przeszłego"],"lain":["lie","imiesłów bierny"],
+"lost":["lose","forma czasu przeszłego"],"made":["make","forma czasu przeszłego"],
+"meant":["mean","forma czasu przeszłego"],"met":["meet","forma czasu przeszłego"],
+"paid":["pay","forma czasu przeszłego"],"rode":["ride","forma czasu przeszłego"],"ridden":["ride","imiesłów bierny"],
+"rang":["ring","forma czasu przeszłego"],"rung":["ring","imiesłów bierny"],
+"rose":["rise","forma czasu przeszłego"],"risen":["rise","imiesłów bierny"],
+"ran":["run","forma czasu przeszłego"],"said":["say","forma czasu przeszłego"],
+"saw":["see","forma czasu przeszłego"],"seen":["see","imiesłów bierny"],
+"sold":["sell","forma czasu przeszłego"],"sent":["send","forma czasu przeszłego"],
+"shook":["shake","forma czasu przeszłego"],"shaken":["shake","imiesłów bierny"],
+"shone":["shine","forma czasu przeszłego"],"shot":["shoot","forma czasu przeszłego"],
+"showed":["show","forma czasu przeszłego"],"shown":["show","imiesłów bierny"],
+"sang":["sing","forma czasu przeszłego"],"sung":["sing","imiesłów bierny"],
+"sank":["sink","forma czasu przeszłego"],"sunk":["sink","imiesłów bierny"],
+"sat":["sit","forma czasu przeszłego"],"slept":["sleep","forma czasu przeszłego"],
+"spoke":["speak","forma czasu przeszłego"],"spoken":["speak","imiesłów bierny"],
+"spent":["spend","forma czasu przeszłego"],"stood":["stand","forma czasu przeszłego"],
+"stole":["steal","forma czasu przeszłego"],"stolen":["steal","imiesłów bierny"],
+"strode":["stride","forma czasu przeszłego"],"stridden":["stride","imiesłów bierny"],
+"struck":["strike","forma czasu przeszłego"],"swam":["swim","forma czasu przeszłego"],"swum":["swim","imiesłów bierny"],
+"swung":["swing","forma czasu przeszłego"],"took":["take","forma czasu przeszłego"],"taken":["take","imiesłów bierny"],
+"taught":["teach","forma czasu przeszłego"],"tore":["tear","forma czasu przeszłego"],"torn":["tear","imiesłów bierny"],
+"told":["tell","forma czasu przeszłego"],"thought":["think","forma czasu przeszłego"],
+"threw":["throw","forma czasu przeszłego"],"thrown":["throw","imiesłów bierny"],
+"understood":["understand","forma czasu przeszłego"],
+"woke":["wake","forma czasu przeszłego"],"woken":["wake","imiesłów bierny"],
+"wore":["wear","forma czasu przeszłego"],"worn":["wear","imiesłów bierny"],
+"won":["win","forma czasu przeszłego"],"wrote":["write","forma czasu przeszłego"],"written":["write","imiesłów bierny"],
+"laid":["lay","forma czasu przeszłego"],"bent":["bend","forma czasu przeszłego"],
+"bound":["bind","forma czasu przeszłego"],"bit":["bite","forma czasu przeszłego"],"bitten":["bite","imiesłów bierny"],
+"bled":["bleed","forma czasu przeszłego"],"blew":["blow","forma czasu przeszłego"],"blown":["blow","imiesłów bierny"],
+"bred":["breed","forma czasu przeszłego"],"clung":["cling","forma czasu przeszłego"],
+"crept":["creep","forma czasu przeszłego"],"dealt":["deal","forma czasu przeszłego"],
+"dug":["dig","forma czasu przeszłego"],"fed":["feed","forma czasu przeszłego"],
+"fought":["fight","forma czasu przeszłego"],"fled":["flee","forma czasu przeszłego"],
+"flung":["fling","forma czasu przeszłego"],"forbade":["forbid","forma czasu przeszłego"],"forbidden":["forbid","imiesłów bierny"],
+"froze":["freeze","forma czasu przeszłego"],"frozen":["freeze","imiesłów bierny"],
+"ground":["grind","forma czasu przeszłego"],"hung":["hang","forma czasu przeszłego"],
+"hid":["hide","forma czasu przeszłego"],"hidden":["hide","imiesłów bierny"],
+"knelt":["kneel","forma czasu przeszłego"],"lent":["lend","forma czasu przeszłego"],
+"lit":["light","forma czasu przeszłego"],"sought":["seek","forma czasu przeszłego"],
+"shrank":["shrink","forma czasu przeszłego"],"shrunk":["shrink","imiesłów bierny"],
+"slid":["slide","forma czasu przeszłego"],"slung":["sling","forma czasu przeszłego"],
+"sowed":["sow","forma czasu przeszłego"],"sown":["sow","imiesłów bierny"],
+"spun":["spin","forma czasu przeszłego"],"spat":["spit","forma czasu przeszłego"],
+"sprang":["spring","forma czasu przeszłego"],"sprung":["spring","imiesłów bierny"],
+"stuck":["stick","forma czasu przeszłego"],"stung":["sting","forma czasu przeszłego"],
+"stank":["stink","forma czasu przeszłego"],"stunk":["stink","imiesłów bierny"],
+"swore":["swear","forma czasu przeszłego"],"sworn":["swear","imiesłów bierny"],
+"swept":["sweep","forma czasu przeszłego"],"wove":["weave","forma czasu przeszłego"],"woven":["weave","imiesłów bierny"],
+"wept":["weep","forma czasu przeszłego"],"wound":["wind","forma czasu przeszłego"],
+"withdrew":["withdraw","forma czasu przeszłego"],"withdrawn":["withdraw","imiesłów bierny"],
+"arose":["arise","forma czasu przeszłego"],"arisen":["arise","imiesłów bierny"],
+"awoke":["awake","forma czasu przeszłego"],"awoken":["awake","imiesłów bierny"],
+"bore":["bear","forma czasu przeszłego"],"borne":["bear","imiesłów bierny"],"born":["bear","imiesłów bierny"],
+"became":["become","forma czasu przeszłego"],"forgave":["forgive","forma czasu przeszłego"],"forgiven":["forgive","imiesłów bierny"],
+"mistook":["mistake","forma czasu przeszłego"],"mistaken":["mistake","imiesłów bierny"],
+"overcame":["overcome","forma czasu przeszłego"],"undertook":["undertake","forma czasu przeszłego"],"undertaken":["undertake","imiesłów bierny"],
+"spelt":["spell","forma czasu przeszłego"],"spilt":["spill","forma czasu przeszłego"],
+"spoilt":["spoil","forma czasu przeszłego"],"dreamt":["dream","forma czasu przeszłego"],
+"learnt":["learn","forma czasu przeszłego"],"burnt":["burn","forma czasu przeszłego"],
+"leapt":["leap","forma czasu przeszłego"],"smelt":["smell","forma czasu przeszłego"]
+};
+function irregularLemma(w){ w = String(w || "").toLowerCase().trim(); const e = IRREGULAR[w]; if (!e) return null; if (e[0] === w) return null; return { lemma: e[0], lemmaKind: e[1] }; }
+async function existsVerb(w){ try { const r = await fetch("https://api.datamuse.com/words?max=1&md=p&sp=" + encodeURIComponent(w)); if (!r.ok) return false; const d = await r.json(); const top = d && d[0]; if (!top || String(top.word).toLowerCase() !== w) return false; return Array.isArray(top.tags) && top.tags.indexOf("v") >= 0; } catch { return false; } }
+async function resolveInflection(w, pos){
+    w = String(w || "").toLowerCase().trim();
+    if (!w || /\s/.test(w)) return null;
+    const ir = irregularLemma(w); if (ir) return { lemma: ir.lemma, kind: ir.lemmaKind };
+    if (pos !== "verb") return null;
+    const cands = [];
+    if (/ing$/.test(w) && w.length > 5) {
+        const stem = w.slice(0, -3);
+        cands.push([stem, "imiesłów czynny"]);
+        cands.push([stem + "e", "imiesłów czynny"]);
+        if (/([bcdfghjklmnpqrstvwxz])\1$/.test(stem)) cands.push([stem.slice(0, -1), "imiesłów czynny"]);
+    } else if (/ied$/.test(w) && w.length > 4) {
+        cands.push([w.slice(0, -3) + "y", "forma czasu przeszłego"]);
+    } else if (/ed$/.test(w) && w.length > 4) {
+        const stem = w.slice(0, -2);
+        cands.push([w.slice(0, -1), "forma czasu przeszłego"]);
+        cands.push([stem, "forma czasu przeszłego"]);
+        if (/([bcdfghjklmnpqrstvwxz])\1$/.test(stem)) cands.push([stem.slice(0, -1), "forma czasu przeszłego"]);
+    }
+    for (const c of cands) { const cand = c[0], kind = c[1]; if (!cand || cand === w || cand.length < 2) continue; if (await existsVerb(cand)) return { lemma: cand, kind: kind }; }
+    return null;
+}
 async function fetchDict(word) {
     try {
         const r = await fetch("https://api.dictionaryapi.dev/api/v2/entries/en/" + encodeURIComponent(word.toLowerCase().trim()));
         if (!r.ok)
-            return { missing: r.status === 404 };
+            { const ir404 = irregularLemma(word); return { missing: r.status === 404, lemma: ir404 ? ir404.lemma : "", lemmaKind: ir404 ? ir404.lemmaKind : "" }; }
         const d = await r.json();
         const entry = Array.isArray(d) ? d[0] : null;
         if (!entry)
@@ -333,10 +446,16 @@ async function fetchDict(word) {
             if (lemma)
                 break;
         }
+        if (!lemma) {
+            const ir = irregularLemma(w0);
+            if (ir) { lemma = ir.lemma; lemmaKind = ir.lemmaKind; }
+            else { try { const inf = await resolveInflection(w0, pos); if (inf) { lemma = inf.lemma; lemmaKind = inf.kind; } } catch (e) { } }
+        }
         return { ipa, pos, example: examples[0] || "", examples: examples, defs: defs.slice(0, 12), audio, lemma, lemmaKind };
     }
-    catch {
-        return {};
+    catch (e) {
+        const ir = irregularLemma(word);
+        return ir ? { lemma: ir.lemma, lemmaKind: ir.lemmaKind } : {};
     }
 }
 const PARTICLES = ["up", "down", "out", "in", "on", "off", "over", "away", "back", "through", "along", "around", "about", "across", "apart", "aside", "forward", "together", "by", "into", "onto", "upon"];
@@ -651,13 +770,12 @@ function SpeakerBtn({ entry, size }) {
             React.createElement("path", { d: "M16.5 8.5a5 5 0 0 1 0 7" }),
             React.createElement("path", { d: "M19.5 6a8 8 0 0 1 0 12" }))));
 }
-function Entry({ e, onDelete, onEdit, onPickAlt, onPickExample }) {
-    const cam = cambridgeUrl(e.word);
+function Entry({ e, onDelete, onEdit, onPickAlt, onPickExample, onWord }) {
     const [showAlts, setShowAlts] = useState(false);
     const hasAlts = e.exampleAlts && e.exampleAlts.length > 0;
     return (React.createElement("article", { className: "lex-entry", style: { padding: "20px 2px", borderBottom: `1px solid ${C.line}` } },
         React.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } },
-            React.createElement("a", { href: cam, target: "_blank", rel: "noopener noreferrer", title: "otw\u00F3rz definicj\u0119 w Cambridge Dictionary", style: { fontSize: 26, fontWeight: 700, letterSpacing: "-.02em", color: C.ink, textDecoration: "none", borderBottom: `2px solid ${C.lime}`, lineHeight: 1.15, wordBreak: "break-word" } }, e.word),
+            React.createElement("span", { onClick: () => onWord && onWord(e.word, e), title: "poka\u017C definicj\u0119 (bez reklam)", style: { fontSize: 26, fontWeight: 700, letterSpacing: "-.02em", color: C.ink, textDecoration: "none", borderBottom: `2px solid ${C.lime}`, lineHeight: 1.15, wordBreak: "break-word", cursor: "pointer" } }, e.word),
             React.createElement("div", { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 } },
                 React.createElement(SpeakerBtn, { entry: e }),
                 React.createElement("button", { onClick: () => onEdit && onEdit(e), "aria-label": "edytuj has\u0142o", className: "lex-icon-btn", style: { border: "none", background: "transparent", color: C.inkSoft, opacity: .6, fontSize: 15, padding: 4, cursor: "pointer" } }, "\u270E"),
@@ -668,7 +786,7 @@ function Entry({ e, onDelete, onEdit, onPickAlt, onPickExample }) {
             e.level && React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: "#fff", background: levelColor(e.level), borderRadius: 5, padding: "2px 6px", letterSpacing: ".04em" } }, e.level)),
         e.lemma && React.createElement("div", { style: { marginTop: 6, fontSize: 13, color: C.inkSoft } },
             React.createElement("span", { style: { color: C.olive, fontWeight: 700 } }, (e.lemmaKind || "forma") + " od "),
-            React.createElement("a", { href: cambridgeUrl(e.lemma), target: "_blank", rel: "noopener noreferrer", style: { color: C.ink, fontWeight: 800, textDecoration: "none", borderBottom: `1.5px solid ${C.lime}` } }, e.lemma)),
+            React.createElement("span", { onClick: () => onWord && onWord(e.lemma, null), title: "poka\u017C definicj\u0119 (bez reklam)", style: { color: C.ink, fontWeight: 800, textDecoration: "none", borderBottom: `1.5px solid ${C.lime}`, cursor: "pointer" } }, e.lemma)),
         React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 7 } },
             React.createElement("span", { style: { fontSize: 21, fontWeight: 700, color: C.ink } }, e.pl),
             e.alts && e.alts.length > 0 && e.alts.map((a, i) => (React.createElement("button", { key: i, onClick: () => onPickAlt && onPickAlt(e.id, a), className: "lex-primary", title: "ustaw jako g\u0142\u00F3wne t\u0142umaczenie", style: { border: `1px solid ${C.line}`, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 12.5, padding: "2px 9px", borderRadius: 14, cursor: "pointer" } }, a)))),
@@ -1185,6 +1303,55 @@ function EntryEdit({ entry, onClose, onSave }) {
                 React.createElement("button", { onClick: save, disabled: saving, className: "lex-primary", style: { flex: 1, padding: "12px", borderRadius: 11, border: "none", background: C.lime, color: C.ink, fontSize: 15, fontWeight: 800, cursor: "pointer" } }, saving ? "zapisuję…" : "zapisz"),
                 React.createElement("button", { onClick: onClose, className: "lex-primary", style: { padding: "12px 16px", borderRadius: 11, border: "1px solid " + C.ink, background: "transparent", color: C.ink, fontSize: 15, fontWeight: 700, cursor: "pointer" } }, "anuluj")))));
 }
+function WordSheet({ word, entry, onClose }) {
+    const [defs, setDefs] = useState([]);
+    const [meta, setMeta] = useState({ ipa: (entry && entry.ipa) || "", pos: (entry && entry.pos) || "", audio: (entry && entry.audio) || "" });
+    const [loading, setLoading] = useState(false);
+    const w = String(word || "").trim();
+    const isPhrase = /\s/.test(w);
+    useEffect(function () {
+        if (!w || isPhrase) return;
+        let ok = true;
+        setLoading(true);
+        fetchDict(w).then(function (d) {
+            if (!ok) return;
+            setDefs((d && d.defs) || []);
+            setMeta(function (m) { return { ipa: m.ipa || (d && d.ipa) || "", pos: m.pos || ((d && d.pos) ? (POS_PL[d.pos] || d.pos) : ""), audio: m.audio || (d && d.audio) || "" }; });
+            setLoading(false);
+        }).catch(function () { if (ok) setLoading(false); });
+        return function () { ok = false; };
+    }, [w]);
+    const spkEntry = entry || { word: w, audio: meta.audio };
+    const cam = cambridgeUrl(w);
+    return (React.createElement("div", { className: "lex-modal-bg", onClick: onClose },
+        React.createElement("div", { className: "lex-modal", onClick: function (e) { e.stopPropagation(); }, style: { maxWidth: 460 } },
+            React.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } },
+                React.createElement("div", { style: { minWidth: 0 } },
+                    React.createElement("div", { style: { fontSize: 30, fontWeight: 800, letterSpacing: "-.02em", lineHeight: 1.12, wordBreak: "break-word" } }, w),
+                    React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 9, marginTop: 6 } },
+                        meta.ipa && React.createElement("span", { style: { fontSize: 13.5, color: C.inkSoft } }, meta.ipa),
+                        meta.pos && React.createElement("span", { style: { fontSize: 13.5, color: C.olive, fontWeight: 700 } }, String(meta.pos).toLowerCase()),
+                        entry && entry.level && React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: "#fff", background: levelColor(entry.level), borderRadius: 5, padding: "2px 6px", letterSpacing: ".04em" } }, entry.level))),
+                React.createElement("div", { style: { marginLeft: "auto", flexShrink: 0 } }, React.createElement(SpeakerBtn, { entry: spkEntry }))),
+            entry && entry.pl && React.createElement("div", { style: { fontSize: 20, fontWeight: 700, marginTop: 12, color: C.ink } }, entry.pl),
+            entry && entry.alts && entry.alts.length > 0 && React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 7, marginTop: 7 } }, entry.alts.map(function (a, i) { return React.createElement("span", { key: i, style: { border: "1px solid " + C.line, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 12.5, padding: "2px 9px", borderRadius: 14 } }, a); })),
+            React.createElement("div", { style: { fontSize: 11, letterSpacing: ".1em", color: C.inkSoft, fontWeight: 700, margin: "16px 0 6px" } }, "definicje" + (loading ? " — ładuję…" : "")),
+            React.createElement("div", { className: "lex-scroll", style: { maxHeight: 264, overflowY: "auto", display: "flex", flexDirection: "column", gap: 6 } },
+                defs.map(function (d, i) {
+                    return React.createElement("div", { key: i, style: { border: "1px solid " + C.line, background: "#fff", borderRadius: 9, padding: "8px 10px" } },
+                        React.createElement("div", { style: { fontSize: 13.5, lineHeight: 1.45, color: C.ink } },
+                            d.pos && React.createElement("span", { style: { color: C.olive, fontWeight: 700 } }, d.pos + " · "),
+                            d.definition),
+                        d.example && React.createElement("div", { style: { fontSize: 13, fontStyle: "italic", color: C.inkSoft, marginTop: 4, lineHeight: 1.45 } }, React.createElement(MarkWord, { text: d.example, word: w })));
+                }),
+                !loading && defs.length === 0 && React.createElement("div", { style: { fontSize: 13, color: C.inkSoft, lineHeight: 1.5 } }, isPhrase ? "to wyrażenie — pełne wyjaśnienie znajdziesz w Cambridge." : "brak definicji w słowniku offline — otwórz w Cambridge po pełną definicję.")),
+            entry && entry.sentence && React.createElement("div", { style: { marginTop: 14, borderLeft: "3px solid " + C.lime, paddingLeft: 12 } },
+                React.createElement("p", { style: { margin: 0, fontStyle: "italic", fontSize: 14.5, lineHeight: 1.5, color: C.ink } }, React.createElement(MarkWord, { text: entry.sentence, word: entry.queried || w })),
+                entry.sentencePl && React.createElement("p", { style: { margin: "5px 0 0", fontSize: 13, color: C.inkSoft, lineHeight: 1.5 } }, entry.sentencePl)),
+            React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 16 } },
+                React.createElement("a", { href: cam, target: "_blank", rel: "noopener noreferrer", className: "lex-primary", style: { flex: 1, textAlign: "center", textDecoration: "none", padding: "12px", borderRadius: 11, border: "1px solid " + C.ink, background: "transparent", color: C.ink, fontSize: 14.5, fontWeight: 700 } }, "otwórz w Cambridge ↗"),
+                React.createElement("button", { onClick: onClose, className: "lex-primary", style: { padding: "12px 16px", borderRadius: 11, border: "none", background: C.lime, color: C.ink, fontSize: 14.5, fontWeight: 800, cursor: "pointer" } }, "zamknij")))));
+}
 function App() {
     const [books, setBooks] = useState([]);
     const [activeId, setActiveId] = useState(null);
@@ -1203,6 +1370,7 @@ function App() {
     const [showCardsAll, setShowCardsAll] = useState(false);
     const [delBook, setDelBook] = useState(null);
     const [entryEdit, setEntryEdit] = useState(null);
+    const [wordSheet, setWordSheet] = useState(null);
     const [revealId, setRevealId] = useState(null);
     const [phraseSug, setPhraseSug] = useState([]);
     const [pool, setPool] = useState([]);
@@ -1423,7 +1591,7 @@ function App() {
         }
     }
     const countLabel = (n) => (n === 1 ? "słowo" : n >= 2 && n <= 4 ? "słowa" : "słów");
-    return (React.createElement("div", { className: "lex-root", style: { display: "flex", background: C.paper, overflow: "hidden" } },
+    return (React.createElement("div", { className: "lex-root", style: { display: "flex", background: PAGE_BG, overflow: "hidden" } },
         React.createElement("style", null, LEX_CSS),
         sidebarOpen && React.createElement("div", { onClick: () => setSidebarOpen(false), className: "lex-overlay", style: { position: "fixed", inset: 0, background: "#0007", zIndex: 30 } }),
         React.createElement("aside", { className: "lex-aside lex-shelf-scroll" + (sidebarOpen ? " open" : ""), style: { width: 280, flexShrink: 0, background: SHELF_BG, backgroundColor: "#EAECF1", color: C.shelfText, display: "flex", flexDirection: "column", overflowY: "auto", zIndex: 40 } },
@@ -1452,11 +1620,11 @@ function App() {
                     totalCards,
                     ")")))),
         React.createElement("main", { style: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 } },
-            React.createElement("header", { style: { display: "flex", alignItems: "center", gap: 12, padding: "14px 20px", borderBottom: `1px solid ${C.line}`, background: C.paper } },
+            React.createElement("header", { style: { display: "flex", alignItems: "center", gap: 12, padding: "14px 20px", borderBottom: `1px solid ${C.line}`, background: PANEL_BG } },
                 React.createElement("button", { onClick: () => setSidebarOpen(true), "aria-label": "poka\u017C ksi\u0105\u017Cki", className: "lex-icon-btn lex-menu", style: { border: "none", background: "transparent", color: C.ink, fontSize: 20, padding: 4, alignItems: "center" } }, "\u2630"),
                 React.createElement("div", { style: { flex: 1, minWidth: 0 } }, activeBook ? (React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 11, minWidth: 0 } },
                     activeBook.cover
-                        ? React.createElement("img", { src: activeBook.cover, alt: "", style: { width: 34, height: 48, objectFit: "cover", borderRadius: 3, flexShrink: 0, boxShadow: "1px 1px 4px rgba(0,0,0,.25)" } })
+                        ? React.createElement("img", { src: activeBook.cover, alt: "", style: { width: 34, height: 48, objectFit: "cover", borderRadius: 3, flexShrink: 0 } })
                         : React.createElement("div", { style: { width: 34, height: 48, borderRadius: 3, flexShrink: 0, background: bookColor(activeBook.title || "") } }),
                     React.createElement("div", { style: { minWidth: 0 } },
                         React.createElement("h1", { style: { margin: 0, fontSize: 21, fontWeight: 800, letterSpacing: "-.02em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, activeBook.title),
@@ -1469,7 +1637,7 @@ function App() {
                     React.createElement("button", { onClick: () => { setEntryMode(m => m === "az" ? "recent" : "az"); setAzLetter(""); }, className: "lex-primary", title: "kolejno\u015B\u0107 listy", style: { border: "none", background: C.paperDeep, color: C.ink, fontWeight: 800, fontSize: 12.5, padding: "8px 11px", borderRadius: 10, cursor: "pointer", whiteSpace: "nowrap" } }, entryMode === "az" ? "ostatnie" : "a–z"),
                     React.createElement("button", { onClick: () => setShowCards(true), className: "lex-primary", style: { border: "none", background: C.lime, color: C.ink, fontWeight: 800, fontSize: 13, padding: "8px 13px", borderRadius: 10, cursor: "pointer", whiteSpace: "nowrap" } }, "fiszki"),
                     React.createElement("input", { className: "lex-field", value: query, onChange: (e) => setQuery(e.target.value), placeholder: "szukaj\u2026", style: { width: 96, padding: "8px 11px", fontSize: 13.5, background: "#fff" } })))),
-            activeBook && entryMode === "az" && (React.createElement("div", { className: "lex-scroll", style: { display: "flex", flexWrap: "wrap", gap: 4, padding: "8px 20px", borderBottom: `1px solid ${C.line}`, background: C.paper } }, ["#"].concat(LETTERS).map(L => {
+            activeBook && entryMode === "az" && (React.createElement("div", { className: "lex-scroll", style: { display: "flex", flexWrap: "wrap", gap: 4, padding: "8px 20px", borderBottom: `1px solid ${C.line}`, background: "transparent" } }, ["#"].concat(LETTERS).map(L => {
                 const has = !!presentLetters[L];
                 const on = azLetter === L;
                 return (React.createElement("button", { key: L, disabled: !has, onClick: () => setAzLetter(on ? "" : L), className: "lex-primary", style: { minWidth: 26, height: 26, borderRadius: 7, border: "none", cursor: has ? "pointer" : "default", background: on ? C.lime : (has ? C.paperDeep : "transparent"), color: has ? C.ink : "#c3cdad", fontSize: 12, fontWeight: 800 } }, L));
@@ -1477,14 +1645,14 @@ function App() {
             React.createElement("div", { ref: scrollRef, className: "lex-scroll", style: { flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 24px" } }, !activeBook ? React.createElement(Empty, { kind: "nobook", onAdd: () => setShowAdd(true) })
                 : view.length === 0 ? React.createElement(Empty, { kind: query ? "nofind" : (azLetter ? "nofind" : "nowords") })
                     : (React.createElement("div", { style: { maxWidth: 680, margin: "0 auto" } },
-                        view.map(e => React.createElement(Entry, { key: e.id, e: e, onDelete: deleteEntry, onEdit: setEntryEdit, onPickAlt: pickAlt, onPickExample: pickExample })),
+                        view.map(e => React.createElement(Entry, { key: e.id, e: e, onDelete: deleteEntry, onEdit: setEntryEdit, onPickAlt: pickAlt, onPickExample: pickExample, onWord: (ww, ent) => setWordSheet({ word: ww, entry: ent || null }) })),
                         busy && React.createElement("div", { style: { padding: "22px 2px", color: C.inkSoft } },
                             React.createElement("span", { style: { fontStyle: "italic", fontSize: 17 } }, "t\u0142umacz\u0119"),
                             React.createElement("span", { className: "lex-dots", style: { marginLeft: 2 } },
                                 React.createElement("span", null, "."),
                                 React.createElement("span", null, "."),
                                 React.createElement("span", null, ".")))))),
-            activeBook && (React.createElement("div", { style: { borderTop: `1px solid ${C.line}`, background: C.paperDeep, padding: "14px 24px 16px" } },
+            activeBook && (React.createElement("div", { style: { borderTop: `1px solid ${C.line}`, background: PANEL_BG, padding: "14px 24px 16px" } },
                 React.createElement("div", { style: { maxWidth: 680, margin: "0 auto" } },
                     error && React.createElement("div", { style: { marginBottom: 10, fontSize: 13, color: C.danger, fontWeight: 600 } }, error),
                     React.createElement("div", { style: { fontSize: 11, letterSpacing: ".14em", color: C.inkSoft, fontWeight: 700, marginBottom: 7 } }, "en \u2192 pl"),
@@ -1511,6 +1679,7 @@ function App() {
         showCards && activeBook && React.createElement(Flashcards, { book: activeBook, onClose: () => setShowCards(false) }),
         showCardsAll && React.createElement(Flashcards, { book: { title: "wszystkie książki", entries: allCards }, onClose: () => setShowCardsAll(false) }),
         entryEdit && React.createElement(EntryEdit, { entry: entryEdit, onClose: () => setEntryEdit(null), onSave: updateEntry }),
+        wordSheet && React.createElement(WordSheet, { word: wordSheet.word, entry: wordSheet.entry, onClose: () => setWordSheet(null) }),
         delBook && (React.createElement("div", { className: "lex-modal-bg", onClick: () => setDelBook(null) },
             React.createElement("div", { className: "lex-modal", onClick: (e) => e.stopPropagation(), style: { maxWidth: 400 } },
                 React.createElement("div", { className: "lex-modal-title" },
