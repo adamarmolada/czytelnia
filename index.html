@@ -87,6 +87,13 @@ const LEX_CSS = `
 .lex-face.back{transform:rotateY(180deg);background:#FBFDF4;}
 .lex-primary{transition:transform .08s ease,opacity .12s ease;} .lex-primary:hover{opacity:.9;} .lex-primary:active{transform:translateY(1px);} .lex-primary:disabled{opacity:.4;cursor:not-allowed;}
 @media (prefers-reduced-motion: reduce){.lex-entry,.lex-dots span,.lex-aside,.lex-card-inner{animation:none;transition:none;}}
+.lex-cap{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(120,120,140,.34);background:linear-gradient(135deg,rgba(255,214,238,.55),rgba(210,236,234,.5) 45%,rgba(220,214,246,.55));color:#0B0B0A;font-weight:800;font-size:12px;padding:5px 11px;border-radius:999px;cursor:pointer;box-shadow:0 2px 8px rgba(18,26,6,.12);transition:transform .08s ease,box-shadow .12s ease,background .15s ease;white-space:nowrap;}
+.lex-cap:hover{box-shadow:0 4px 12px rgba(18,26,6,.16);}
+.lex-cap:active{transform:translateY(1px);}
+.lex-cap.on{background:linear-gradient(135deg,rgba(176,228,86,.72),rgba(150,220,208,.6));border-color:rgba(90,120,20,.5);}
+.lex-cap-input{width:100px;border:1px solid rgba(120,120,140,.34);background:linear-gradient(135deg,rgba(255,255,255,.82),rgba(236,240,228,.8));color:#0B0B0A;font-family:inherit;font-size:12.5px;font-weight:600;padding:5px 12px;border-radius:999px;outline:none;box-shadow:0 2px 8px rgba(18,26,6,.12);transition:border-color .15s ease,box-shadow .15s ease,width .18s ease;}
+.lex-cap-input::placeholder{color:#56604A;opacity:.7;}
+.lex-cap-input:focus{border-color:#8ACE00;box-shadow:0 0 0 3px rgba(138,206,0,.28);width:138px;}
 `;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const FIREBASE_CONFIG = {
@@ -513,6 +520,47 @@ async function wiktionaryPhrases(word) {
         return [];
     }
 }
+function cleanWikiInline(s){
+    s = String(s || "");
+    s = s.replace(/\{\{[^{}]*\}\}/g, " ");
+    s = s.replace(/\[\[[^\]|]*\|([^\]]*)\]\]/g, "$1");
+    s = s.replace(/\[\[([^\]]*)\]\]/g, "$1");
+    s = s.replace(/'''?/g, "");
+    s = s.replace(/\s+/g, " ").trim();
+    return s;
+}
+async function wiktionaryExample(word){
+    try {
+        const w = String(word || "").toLowerCase().trim();
+        if (!w || /\s/.test(w) || w.length < 2) return "";
+        const r = await fetch("https://en.wiktionary.org/w/api.php?action=parse&page=" + encodeURIComponent(w) + "&prop=wikitext&format=json&origin=*");
+        if (!r.ok) return "";
+        const d = await r.json();
+        const wt = (d && d.parse && d.parse.wikitext && d.parse.wikitext["*"]) ? String(d.parse.wikitext["*"]) : "";
+        if (!wt) return "";
+        const cands = [];
+        let m;
+        const uxRe = /\{\{(?:ux|usex|uxi)\|en\|([^}]*)\}\}/gi;
+        while ((m = uxRe.exec(wt))) {
+            let first = (m[1] || "").split("|").filter(p => p.indexOf("=") < 0)[0] || "";
+            first = first.replace(/^1=/, "");
+            const s2 = cleanWikiInline(first);
+            if (s2 && s2.length >= 6 && s2.length <= 180 && /[a-z]/i.test(s2)) cands.push(s2);
+            if (cands.length >= 8) break;
+        }
+        if (!cands.length) {
+            const q = /(?:^|\n)#+\*?:\s*''([^'\n][^\n]*?)''/g;
+            while ((m = q.exec(wt))) {
+                const s3 = cleanWikiInline(m[1]);
+                if (s3 && s3.length >= 6 && s3.length <= 180) cands.push(s3);
+                if (cands.length >= 8) break;
+            }
+        }
+        if (!cands.length) return "";
+        const re = new RegExp("\\b" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+        return cands.find(c => re.test(c)) || cands[0];
+    } catch (e) { return ""; }
+}
 async function lookupWord({ word, sentence }) {
     const hasSentence = sentence && sentence.trim().length > 0;
     const clean = word.trim();
@@ -522,7 +570,11 @@ async function lookupWord({ word, sentence }) {
     let exArr = (!isPhrase && Array.isArray(dict.examples)) ? dict.examples.slice() : [];
     if (exArr.length > 1)
         exArr.sort((a, b) => (surfRe.test(b) ? 1 : 0) - (surfRe.test(a) ? 1 : 0));
-    const src = hasSentence ? sentence.trim() : (exArr[0] || dict.example || "");
+    let autoSrc = hasSentence ? sentence.trim() : (exArr[0] || dict.example || "");
+    if (!hasSentence && !isPhrase && !autoSrc) {
+        try { autoSrc = await wiktionaryExample(clean); } catch (e) { autoSrc = ""; }
+    }
+    const src = autoSrc;
     const exampleAlts = (!hasSentence) ? exArr.filter(x => x !== src).slice(0, 3) : [];
     let sentencePl = "";
     if (src) {
@@ -769,7 +821,7 @@ function MarkWord({ text, word }) {
 }
 function SpeakerBtn({ entry, size }) {
     const [st, setSt] = useState("idle");
-    const s = size || 36;
+    const s = size || 32;
     return (React.createElement("button", { onClick: (e) => { e.stopPropagation(); playPronunciation(entry, setSt); }, "aria-label": "pos\u0142uchaj wymowy", title: "pos\u0142uchaj wymowy", className: "lex-spk" + (st === "playing" ? " playing" : ""), style: { width: s, height: s, flexShrink: 0, border: "none", borderRadius: s * 0.28, background: C.lime, color: C.ink, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" } },
         React.createElement("svg", { width: Math.round(s * 0.47), height: Math.round(s * 0.47), viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round" },
             React.createElement("path", { d: "M3 9v6h4l5 4V5L7 9H3z" }),
@@ -780,37 +832,34 @@ function shortKind(k){ const m = { "forma czasu przeszłego": "cz. przeszły", "
 function Entry({ e, onDelete, onEdit, onPickAlt, onPickExample, onWord }) {
     const [showAlts, setShowAlts] = useState(false);
     const hasAlts = e.exampleAlts && e.exampleAlts.length > 0;
-    return (React.createElement("article", { className: "lex-entry", style: { padding: "20px 2px", borderBottom: `1px solid ${C.line}` } },
+    return (React.createElement("article", { className: "lex-entry", style: { padding: "13px 2px", borderBottom: `1px solid ${C.line}` } },
         React.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } },
-            React.createElement("span", { onClick: () => onWord && onWord(e.word, e), title: "poka\u017C definicj\u0119 (bez reklam)", style: { fontSize: 26, fontWeight: 700, letterSpacing: "-.02em", color: C.ink, textDecoration: "none", borderBottom: `2px solid ${C.lime}`, lineHeight: 1.15, wordBreak: "break-word", cursor: "pointer" } }, e.word),
+            React.createElement("span", { onClick: () => onWord && onWord(e.word, e), title: "poka\u017C definicj\u0119 (bez reklam)", style: { fontSize: 22, fontWeight: 700, letterSpacing: "-.02em", color: C.ink, textDecoration: "none", borderBottom: `2px solid ${C.lime}`, lineHeight: 1.12, wordBreak: "break-word", cursor: "pointer" } }, e.word),
             React.createElement("div", { style: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, flexShrink: 0 } },
                 React.createElement(SpeakerBtn, { entry: e }),
                 React.createElement("button", { onClick: () => onEdit && onEdit(e), "aria-label": "edytuj has\u0142o", className: "lex-icon-btn", style: { border: "none", background: "transparent", color: C.inkSoft, opacity: .6, fontSize: 15, padding: 4, cursor: "pointer" } }, "\u270E"),
                 React.createElement("button", { onClick: () => onDelete(e.id), "aria-label": "usu\u0144 has\u0142o", className: "lex-icon-btn", style: { border: "none", background: "transparent", color: C.inkSoft, opacity: .45, fontSize: 12.5, padding: 4, cursor: "pointer" } }, "usu\u0144"))),
-        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 9, marginTop: 6 } },
-            e.ipa && React.createElement("span", { style: { fontSize: 13.5, color: C.inkSoft } }, e.ipa),
-            e.pos && React.createElement("span", { style: { fontSize: 13.5, color: C.olive, fontWeight: 700 } }, e.pos.toLowerCase()),
+        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 7, marginTop: 4 } },
+            e.ipa && React.createElement("span", { style: { fontSize: 13, color: C.inkSoft } }, e.ipa),
+            e.pos && React.createElement("span", { style: { fontSize: 13, color: C.olive, fontWeight: 700 } }, e.pos.toLowerCase()),
             e.level && React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: "#fff", background: levelColor(e.level), borderRadius: 5, padding: "2px 6px", letterSpacing: ".04em" } }, e.level)),
-        e.lemma && React.createElement("div", { style: { marginTop: 6, fontSize: 13, color: C.inkSoft } },
+        e.lemma && React.createElement("div", { style: { marginTop: 4, fontSize: 12.5, color: C.inkSoft } },
             React.createElement("span", { style: { color: C.inkSoft, fontWeight: 400 } }, shortKind(e.lemmaKind) + " od "),
             React.createElement("span", { onClick: () => onWord && onWord(e.lemma, null), title: "poka\u017C definicj\u0119 (bez reklam)", style: { color: C.ink, fontWeight: 800, textDecoration: "none", borderBottom: `1.5px solid ${C.lime}`, cursor: "pointer" } }, e.lemma)),
-        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginTop: 7 } },
-            React.createElement("span", { style: { fontSize: 21, fontWeight: 700, color: C.ink } }, e.pl),
-            e.alts && e.alts.length > 0 && e.alts.map((a, i) => (React.createElement("button", { key: i, onClick: () => onPickAlt && onPickAlt(e.id, a), className: "lex-primary", title: "ustaw jako g\u0142\u00F3wne t\u0142umaczenie", style: { border: `1px solid ${C.line}`, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 12.5, padding: "2px 9px", borderRadius: 14, cursor: "pointer" } }, a)))),
-        e.definition && React.createElement("p", { style: { margin: "6px 0 0", fontSize: 13.5, color: C.inkSoft, lineHeight: 1.5, fontStyle: "italic" } }, e.definition),
-        e.sentence && (React.createElement("div", { style: { marginTop: 14, borderLeft: `3px solid ${C.lime}`, paddingLeft: 14 } },
-            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 6, marginBottom: 6 } },
-                React.createElement("span", { style: { width: 7, height: 7, borderRadius: 7, background: e.fromBook ? C.lime : "#A7B190" } }),
-                React.createElement("span", { style: { fontSize: 11, letterSpacing: ".08em", color: C.inkSoft, fontWeight: 700 } }, e.fromBook ? "z książki" : "przykład użycia")),
-            React.createElement("p", { style: { margin: 0, fontStyle: "italic", fontSize: 15, lineHeight: 1.5, color: C.ink, fontWeight: 500 } },
+        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 7, marginTop: 5 } },
+            React.createElement("span", { style: { fontSize: 19, fontWeight: 700, color: C.ink } }, e.pl),
+            e.alts && e.alts.length > 0 && e.alts.map((a, i) => (React.createElement("button", { key: i, onClick: () => onPickAlt && onPickAlt(e.id, a), className: "lex-primary", title: "ustaw jako g\u0142\u00F3wne t\u0142umaczenie", style: { border: `1px solid ${C.line}`, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 12, padding: "2px 8px", borderRadius: 14, cursor: "pointer" } }, a)))),
+        e.definition && React.createElement("p", { style: { margin: "5px 0 0", fontSize: 13, color: C.inkSoft, lineHeight: 1.45, fontStyle: "italic" } }, e.definition),
+        e.sentence && (React.createElement("div", { style: { marginTop: 10, borderLeft: `3px solid ${e.fromBook ? C.lime : "#A7B190"}`, paddingLeft: 12 } },
+            React.createElement("p", { style: { margin: 0, fontStyle: "italic", fontSize: 14, lineHeight: 1.5, color: C.ink, fontWeight: 500 } },
                 React.createElement(MarkWord, { text: e.sentence, word: e.queried })),
-            e.sentencePl && React.createElement("p", { style: { margin: "6px 0 0", fontSize: 13, lineHeight: 1.5, color: C.inkSoft } }, e.sentencePl),
+            e.sentencePl && React.createElement("p", { style: { margin: "5px 0 0", fontSize: 12.5, lineHeight: 1.5, color: C.inkSoft } }, e.sentencePl),
             hasAlts && (React.createElement("div", { style: { marginTop: 9 } },
                 React.createElement("button", { onClick: () => setShowAlts(v => !v), className: "lex-primary", style: { border: "none", background: "transparent", color: C.olive, fontWeight: 700, fontSize: 12, padding: "2px 0", cursor: "pointer", display: "flex", alignItems: "center", gap: 5 } },
                     React.createElement("span", { style: { transform: showAlts ? "rotate(90deg)" : "none", transition: "transform .15s ease", display: "inline-block" } }, "\u25B8"),
                     showAlts ? "ukryj inne przyk\u0142ady" : "inne przyk\u0142ady (" + e.exampleAlts.length + ")"),
                 showAlts && React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 5, marginTop: 6 } }, e.exampleAlts.map((a, i) => (React.createElement("button", { key: i, onClick: () => { onPickExample && onPickExample(e.id, a); setShowAlts(false); }, style: { textAlign: "left", border: `1px solid ${C.line}`, background: "#fff", color: C.ink, fontStyle: "italic", fontSize: 13.5, lineHeight: 1.45, padding: "7px 10px", borderRadius: 9, cursor: "pointer" } }, a)))))))),
-        e.note && React.createElement("p", { style: { margin: "8px 0 0", fontSize: 13.5, color: C.inkSoft, lineHeight: 1.5 } }, e.note)));
+        e.note && React.createElement("p", { style: { margin: "6px 0 0", fontSize: 13, color: C.inkSoft, lineHeight: 1.5 } }, e.note)));
 }
 const _edgeCache = {};
 function sampleEdgeColor(url) {
@@ -1310,8 +1359,9 @@ function EntryEdit({ entry, onClose, onSave }) {
                 React.createElement("button", { onClick: save, disabled: saving, className: "lex-primary", style: { flex: 1, padding: "12px", borderRadius: 11, border: "none", background: C.lime, color: C.ink, fontSize: 15, fontWeight: 800, cursor: "pointer" } }, saving ? "zapisuję…" : "zapisz"),
                 React.createElement("button", { onClick: onClose, className: "lex-primary", style: { padding: "12px 16px", borderRadius: 11, border: "1px solid " + C.ink, background: "transparent", color: C.ink, fontSize: 15, fontWeight: 700, cursor: "pointer" } }, "anuluj")))));
 }
-function FanIcon() {
-    return (React.createElement("svg", { width: 20, height: 20, viewBox: "0 0 24 24", fill: "none", "aria-hidden": true, style: { display: "block" } },
+function FanIcon({ size }) {
+    const _s = size || 20;
+    return (React.createElement("svg", { width: _s, height: _s, viewBox: "0 0 24 24", fill: "none", "aria-hidden": true, style: { display: "block" } },
         React.createElement("g", { stroke: C.ink, strokeWidth: 1.6, strokeLinejoin: "round" },
             React.createElement("rect", { x: 7.5, y: 6.5, width: 9, height: 12.5, rx: 1.6, fill: "#F4F8EA", transform: "rotate(-20 12 18)" }),
             React.createElement("rect", { x: 7.5, y: 6, width: 9, height: 13, rx: 1.6, fill: "#FFFFFF", transform: "rotate(-1 12 18)" }),
@@ -1635,7 +1685,6 @@ function App() {
                     ")")))),
         React.createElement("main", { style: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 } },
             React.createElement("header", { style: { position: "relative", display: "flex", alignItems: "center", gap: 12, padding: "14px 20px", borderBottom: `1px solid ${C.line}`, background: PANEL_BG } },
-                activeBook && entries.length > 0 && React.createElement("button", { onClick: () => setShowCards(true), className: "lex-primary", "aria-label": "fiszki", title: "fiszki", style: { position: "absolute", right: 20, bottom: 0, transform: "translateY(50%)", zIndex: 25, display: "flex", alignItems: "center", gap: 8, border: `1px solid ${C.limeDeep}`, background: C.lime, color: C.ink, fontWeight: 800, fontSize: 13, padding: "8px 15px", borderRadius: 999, cursor: "pointer", boxShadow: "0 5px 16px rgba(18,26,6,.24)" } }, React.createElement(FanIcon, null), "fiszki"),
                 React.createElement("button", { onClick: () => setSidebarOpen(true), "aria-label": "poka\u017C ksi\u0105\u017Cki", className: "lex-icon-btn lex-menu", style: { border: "none", background: "transparent", color: C.ink, fontSize: 20, padding: 4, alignItems: "center" } }, "\u2630"),
                 React.createElement("div", { style: { flex: 1, minWidth: 0 } }, activeBook ? (React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 11, minWidth: 0 } },
                     activeBook.cover
@@ -1648,9 +1697,10 @@ function App() {
                             entries.length,
                             " ",
                             countLabel(entries.length))))) : React.createElement("h1", { style: { margin: 0, fontSize: 22, fontWeight: 900, letterSpacing: "-.03em" } }, "czytelnia")),
-                activeBook && entries.length > 0 && (React.createElement(React.Fragment, null,
-                    React.createElement("button", { onClick: () => { setEntryMode(m => m === "az" ? "recent" : "az"); setAzLetter(""); }, className: "lex-primary", title: "kolejno\u015B\u0107 listy", style: { border: "none", background: C.paperDeep, color: C.ink, fontWeight: 800, fontSize: 12.5, padding: "8px 11px", borderRadius: 10, cursor: "pointer", whiteSpace: "nowrap" } }, entryMode === "az" ? "ostatnie" : "a–z"),
-                    React.createElement("input", { className: "lex-field", value: query, onChange: (e) => setQuery(e.target.value), placeholder: "szukaj\u2026", style: { width: 96, padding: "8px 11px", fontSize: 13.5, background: "#fff" } })))),
+                activeBook && entries.length > 0 && React.createElement("div", { style: { position: "absolute", right: 16, bottom: 0, transform: "translateY(50%)", zIndex: 25, display: "flex", alignItems: "center", gap: 7 } },
+                    React.createElement("button", { onClick: () => { setEntryMode(m => m === "az" ? "recent" : "az"); setAzLetter(""); }, className: "lex-cap" + (entryMode === "az" ? " on" : ""), title: "kolejno\u015B\u0107 listy" }, entryMode === "az" ? "ostatnie" : "a–z"),
+                    React.createElement("button", { onClick: () => setShowCards(true), className: "lex-cap", title: "fiszki" }, React.createElement(FanIcon, { size: 16 }), "fiszki"),
+                    React.createElement("input", { className: "lex-cap-input", value: query, onChange: (e) => setQuery(e.target.value), placeholder: "szukaj\u2026" }))),
             activeBook && entryMode === "az" && (React.createElement("div", { className: "lex-scroll", style: { display: "flex", flexWrap: "wrap", gap: 4, padding: "8px 20px", borderBottom: `1px solid ${C.line}`, background: "transparent" } }, ["#"].concat(LETTERS).map(L => {
                 const has = !!presentLetters[L];
                 const on = azLetter === L;
