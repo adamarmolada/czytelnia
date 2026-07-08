@@ -169,6 +169,19 @@ function cloudDoc() {
         return null;
     }
 }
+const DEEPL_PROXY = "";
+function deeplUrl() { try { const o = localStorage.getItem("czytelnia:deepl"); if (o && /^https?:\/\//i.test(o)) return o; } catch (e) { } return DEEPL_PROXY || ""; }
+async function viaDeepL(text, lang) {
+    const base = deeplUrl();
+    if (!base) throw new Error("no deepl");
+    const u = base + (base.indexOf("?") >= 0 ? "&" : "?") + "sl=" + (lang === "nl" ? "NL" : "EN") + "&q=" + encodeURIComponent(text);
+    const r = await fetch(u);
+    if (!r.ok) throw new Error("deepl " + r.status);
+    const d = await r.json();
+    const t = (d && d.text) ? String(d.text).trim() : "";
+    if (!t) throw new Error("deepl empty");
+    return t;
+}
 async function viaGoogle(text, lang) {
     const _sl = lang === "nl" ? "nl" : "en";
     const r = await fetch("https://translate.googleapis.com/translate_a/single?client=gtx&sl=" + _sl + "&tl=pl&dt=t&q=" + encodeURIComponent(text));
@@ -206,6 +219,7 @@ async function viaGoogleDetailed(text, lang) {
 async function translate(text, lang) {
     if (!text || !text.trim())
         return "";
+    if (deeplUrl()) { try { const _d = await viaDeepL(text, lang); if (_d) return _d; } catch (e) { } }
     return await viaGoogle(text, lang);
 }
 function cleanPolish(v) {
@@ -244,6 +258,7 @@ async function translateDetailed(text, lang) {
         }
         catch (e) { }
     }
+    if (deeplUrl()) { try { const _dd = await viaDeepL(text, lang); if (_dd) best = _dd; } catch (e) { } }
     best = String(best || "").trim();
     if (best)
         seen[best.toLowerCase()] = 1;
@@ -610,7 +625,10 @@ async function lookupWord({ word, sentence, lang }) {
         }
     }
     alts = alts.filter(a => a.toLowerCase() !== pl.toLowerCase()).slice(0, 5);
-    const pos = isPhrase ? phraseKind(clean) : (dict.pos ? (POS_PL[dict.pos] || dict.pos) : "");
+    let pos;
+    if (isPhrase) pos = phraseKind(clean);
+    else if (_lang === "nl" && dict && dict.posList && dict.posList.length) pos = dict.posList.map(function (k) { return POS_PL[k] || k; }).join(" \u00B7 ");
+    else pos = dict.pos ? (POS_PL[dict.pos] || dict.pos) : "";
     let _level = info.level || ""; if (_lang === "nl" && !_level && dict && ((dict.defs && dict.defs.length) || dict.ipa || dict.article)) _level = "C2";
     return { id: uid(), word: clean, queried: clean, ipa: dict.ipa || "", pos: pos, pl: pl, alts: alts, level: _level, note: "", lemma: dict.lemma || "", lemmaKind: dict.lemmaKind || "", sentence: src, sentencePl, exampleAlts: exampleAlts, audio: dict.audio || "", fromBook: !!hasSentence, createdAt: Date.now(), phrase: isPhrase, lang: _lang, article: (dict && dict.article) || "", plural: (dict && dict.plural) || "" };
 }
@@ -715,7 +733,7 @@ function nlUx(line){
 }
 async function fetchDictNL(word){
     const w = String(word || "").toLowerCase().trim();
-    const out = { ipa: "", pos: "", example: "", examples: [], defs: [], audio: "", lemma: "", lemmaKind: "", article: "", plural: "" };
+    const out = { ipa: "", pos: "", example: "", examples: [], defs: [], audio: "", lemma: "", lemmaKind: "", article: "", plural: "", posList: [] };
     let audioFile = "";
     if (!w) return out;
     try {
@@ -760,6 +778,7 @@ async function fetchDictNL(word){
                     }
                 }
                 if (out.defs[0]) out.pos = out.defs[0].pos;
+                const _seenP = {}; for (const dd of out.defs){ if (dd.pos && !_seenP[dd.pos]){ _seenP[dd.pos] = 1; out.posList.push(dd.pos); } }
             }
         }
     } catch (e) { }
@@ -962,25 +981,31 @@ function speakBrowser(word, lang) {
         return false;
     }
 }
+function googleTtsUrl(text, lang) { const t = String(text || "").trim().slice(0, 180); if (!t) return ""; return "https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=" + (lang === "nl" ? "nl" : "en") + "&q=" + encodeURIComponent(t) + "&total=1&idx=0&textlen=" + t.length; }
 function playPronunciation(entry, setSt) {
     setSt && setSt("playing");
     const done = () => setSt && setSt("idle");
-    if (entry.audio) {
+    const srcs = [];
+    if (entry.audio) srcs.push(entry.audio);
+    const g = googleTtsUrl(entry.word, entry.lang);
+    if (g) srcs.push(g);
+    let i = 0;
+    const tryNext = () => {
+        if (i >= srcs.length) { speakBrowser(entry.word, entry.lang); setTimeout(done, 1100); return; }
+        const url = srcs[i++];
         try {
-            const a = new Audio(entry.audio);
+            const a = new Audio(url);
             a.onended = done;
-            a.onerror = () => { speakBrowser(entry.word, entry.lang); done(); };
+            a.onerror = () => tryNext();
             const p = a.play();
-            if (p && p.catch)
-                p.catch(() => { speakBrowser(entry.word, entry.lang); done(); });
-            return;
+            if (p && p.catch) p.catch(() => tryNext());
         }
-        catch { }
-    }
-    speakBrowser(entry.word, entry.lang);
-    setTimeout(done, 1100);
+        catch (e) { tryNext(); }
+    };
+    tryNext();
 }
 function levelColor(l) { const c = { A1: "#3E7D00", A2: "#3E7D00", B1: "#B8791B", B2: "#B8791B", C1: "#7B2D26", C2: "#7B2D26" }; return c[l] || "#56604A"; }
+function nt2Level(l) { return l === "A1" || l === "A2" || l === "B1" || l === "B2"; }
 function bookColor(s) {
     const pal = ["#1F6F6B", "#B8791B", "#3E5400", "#26333E", "#6FA800", "#7B2D26", "#2B3A55", "#0B0B0A"];
     let h = 0;
@@ -1029,6 +1054,7 @@ function Entry({ e, onDelete, onEdit, onPickAlt, onPickExample, onWord }) {
             e.ipa && React.createElement("span", { style: { fontSize: 13, color: C.inkSoft } }, e.ipa),
             e.pos && React.createElement("span", { style: { fontSize: 13, color: C.olive, fontWeight: 400 } }, e.pos.toLowerCase()),
             e.level && React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: "#fff", background: levelColor(e.level), borderRadius: 5, padding: "2px 6px", letterSpacing: ".04em" } }, e.level),
+            e.lang === "nl" && e.level && nt2Level(e.level) && React.createElement("span", { title: "s\u0142ownictwo w zakresie egzaminu NT2", style: { fontSize: 10.5, fontWeight: 800, color: C.olive, border: "1px solid " + C.limeDeep, borderRadius: 5, padding: "1px 5px", letterSpacing: ".06em" } }, "NT2"),
             e.plural && React.createElement("span", { style: { fontSize: 12.5, color: C.inkSoft } }, "l.mn: " + e.plural)),
         e.lemma && React.createElement("div", { style: { marginTop: 4, fontSize: 12.5, color: C.inkSoft } },
             React.createElement("span", { style: { color: C.inkSoft, fontWeight: 400 } }, shortKind(e.lemmaKind) + " od "),
@@ -1504,7 +1530,7 @@ function EntryEdit({ entry, onClose, onSave, lang }) {
                     const [d, info] = await Promise.all([fetchDict(w2, _lang), wordInfo(w2, _lang)]);
                     patch.ipa = (d && d.ipa) || "";
                     patch.audio = (d && d.audio) || "";
-                    patch.pos = (d && d.pos) ? (POS_PL[d.pos] || d.pos) : "";
+                    patch.pos = (_lang === "nl" && d && d.posList && d.posList.length) ? d.posList.map(function (k) { return POS_PL[k] || k; }).join(" \u00B7 ") : ((d && d.pos) ? (POS_PL[d.pos] || d.pos) : "");
                     let _lv2 = (info && info.level) || ""; if (_lang === "nl" && !_lv2 && d && ((d.defs && d.defs.length) || d.ipa || d.article)) _lv2 = "C2";
                     patch.level = _lv2;
                     patch.lemma = (d && d.lemma) || "";
@@ -1589,7 +1615,7 @@ function WordSheet({ word, entry, onClose, lang }) {
                     React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 9, marginTop: 6 } },
                         meta.ipa && React.createElement("span", { style: { fontSize: 13.5, color: C.inkSoft } }, meta.ipa),
                         meta.pos && React.createElement("span", { style: { fontSize: 13.5, color: C.olive, fontWeight: 700 } }, String(meta.pos).toLowerCase()),
-                        entry && entry.level && React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: "#fff", background: levelColor(entry.level), borderRadius: 5, padding: "2px 6px", letterSpacing: ".04em" } }, entry.level), entry && entry.plural && React.createElement("span", { style: { fontSize: 13, color: C.inkSoft } }, "l.mn: " + entry.plural))),
+                        entry && entry.level && React.createElement("span", { style: { fontSize: 11, fontWeight: 800, color: "#fff", background: levelColor(entry.level), borderRadius: 5, padding: "2px 6px", letterSpacing: ".04em" } }, entry.level), entry && entry.lang === "nl" && entry.level && nt2Level(entry.level) && React.createElement("span", { title: "s\u0142ownictwo w zakresie egzaminu NT2", style: { fontSize: 10.5, fontWeight: 800, color: C.olive, border: "1px solid " + C.limeDeep, borderRadius: 5, padding: "1px 5px", letterSpacing: ".06em" } }, "NT2"), entry && entry.plural && React.createElement("span", { style: { fontSize: 13, color: C.inkSoft } }, "l.mn: " + entry.plural))),
                 React.createElement("div", { style: { marginLeft: "auto", flexShrink: 0 } }, React.createElement(SpeakerBtn, { entry: spkEntry }))),
             entry && entry.pl && React.createElement("div", { style: { fontSize: 20, fontWeight: 700, marginTop: 12, color: C.ink } }, entry.pl),
             entry && entry.alts && entry.alts.length > 0 && React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 7, marginTop: 7 } }, entry.alts.map(function (a, i) { return React.createElement("span", { key: i, style: { border: "1px solid " + C.line, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 12.5, padding: "2px 9px", borderRadius: 14 } }, a); })),
@@ -1874,7 +1900,8 @@ function App() {
                 React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9 } },
                     React.createElement("div", { style: { fontSize: 30, fontWeight: 900, letterSpacing: "-.04em", lineHeight: 1 } }, "czytelnia"),
                     React.createElement("span", { className: "lex-spark" + (syncBusy ? " sync" : ""), title: syncTitle, style: { fontSize: 19, lineHeight: 1, opacity: syncOff ? 0.4 : 1 } }, syncGlyph)),
-                React.createElement("div", { style: { display: "flex", gap: 4, marginTop: 12, background: "rgba(11,11,10,.06)", borderRadius: 10, padding: 3 } }, ["en", "nl"].map(L => React.createElement("button", { key: L, onClick: () => setLang(L), style: { flex: 1, border: "none", cursor: "pointer", borderRadius: 8, padding: "6px 0", fontSize: 12.5, fontWeight: 800, letterSpacing: ".08em", background: lang === L ? C.ink : "transparent", color: lang === L ? "#fff" : C.shelfMute } }, L === "en" ? "ENG" : "NL")))),
+                React.createElement("div", { style: { display: "flex", gap: 4, marginTop: 12, background: "rgba(11,11,10,.06)", borderRadius: 10, padding: 3 } }, ["en", "nl"].map(L => React.createElement("button", { key: L, onClick: () => setLang(L), style: { flex: 1, border: "none", cursor: "pointer", borderRadius: 8, padding: "6px 0", fontSize: 12.5, fontWeight: 800, letterSpacing: ".08em", background: lang === L ? C.ink : "transparent", color: lang === L ? "#fff" : C.shelfMute } }, L === "en" ? "ENG" : "NL"))),
+                React.createElement("button", { onClick: () => { try { const cur = localStorage.getItem("czytelnia:deepl") || ""; const v = prompt("Adres proxy DeepL (URL workera). Puste = wy\u0142\u0105czone:", cur); if (v !== null) { const t = String(v).trim(); if (t) localStorage.setItem("czytelnia:deepl", t); else localStorage.removeItem("czytelnia:deepl"); location.reload(); } } catch (e) { } }, style: { marginTop: 9, border: "none", background: "transparent", color: C.shelfMute, fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0, textAlign: "left", opacity: .85 } }, deeplUrl() ? "\u2699 DeepL: w\u0142\u0105czony" : "\u2699 DeepL: skonfiguruj")),
             React.createElement("div", { style: { padding: "4px 12px 16px", flex: 1 } },
                 React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } },
                     React.createElement("div", { key: "__add", style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
