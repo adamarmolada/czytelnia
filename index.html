@@ -134,7 +134,7 @@ function saveCovers(a) { try {
 }
 catch { } }
 function cambridgeUrl(w) { return "https://dictionary.cambridge.org/dictionary/english/" + encodeURIComponent(String(w || "").trim().toLowerCase().replace(/\s+/g, "-")); }
-function normEntry(e) { return { id: e.id || uid(), word: e.word || "", queried: e.queried || e.word || "", ipa: e.ipa || "", pos: e.pos || "", pl: e.pl || "", alts: Array.isArray(e.alts) ? e.alts : [], level: e.level || "", note: e.note || "", definition: e.definition || "", lemma: e.lemma || "", lemmaKind: e.lemmaKind || "", sentence: e.sentence || "", sentencePl: e.sentencePl || "", exampleAlts: Array.isArray(e.exampleAlts) ? e.exampleAlts : [], audio: e.audio || "", fromBook: !!e.fromBook, phrase: !!e.phrase, source: e.source || "", createdAt: e.createdAt || Date.now() }; }
+function normEntry(e) { return { id: e.id || uid(), word: e.word || "", queried: e.queried || e.word || "", ipa: e.ipa || "", pos: e.pos || "", pl: e.pl || "", alts: Array.isArray(e.alts) ? e.alts : [], level: e.level || "", note: e.note || "", definition: e.definition || "", lemma: e.lemma || "", lemmaKind: e.lemmaKind || "", sentence: e.sentence || "", sentencePl: e.sentencePl || "", exampleAlts: Array.isArray(e.exampleAlts) ? e.exampleAlts : [], audio: e.audio || "", fromBook: !!e.fromBook, phrase: !!e.phrase, source: e.source || "", lang: e.lang || "", createdAt: e.createdAt || Date.now() }; }
 function migrate(lib) {
     if (!lib || typeof lib !== "object")
         lib = {};
@@ -146,7 +146,7 @@ function migrate(lib) {
             if ((e.createdAt || 0) > latest)
                 latest = e.createdAt || 0;
         }
-        return { id: b.id || uid(), title: b.title || "", author: b.author || "", cover: b.cover || "", pages: b.pages || 0, spineColor: b.spineColor || "", spineShade: b.spineShade || "", createdAt: b.createdAt || latest || Date.now(), touchedAt: b.touchedAt || latest || b.createdAt || Date.now(), entries: entries.map(normEntry) };
+        return { id: b.id || uid(), title: b.title || "", author: b.author || "", cover: b.cover || "", pages: b.pages || 0, spineColor: b.spineColor || "", spineShade: b.spineShade || "", lang: b.lang || "en", createdAt: b.createdAt || latest || Date.now(), touchedAt: b.touchedAt || latest || b.createdAt || Date.now(), entries: entries.map(normEntry) };
     });
     const pool = Array.isArray(lib.pool) ? lib.pool.map(normEntry) : [];
     return { books: out, pool: pool, updatedAt: lib.updatedAt || 0 };
@@ -169,8 +169,9 @@ function cloudDoc() {
         return null;
     }
 }
-async function viaGoogle(text) {
-    const r = await fetch("https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pl&dt=t&q=" + encodeURIComponent(text));
+async function viaGoogle(text, lang) {
+    const _sl = lang === "nl" ? "nl" : "en";
+    const r = await fetch("https://translate.googleapis.com/translate_a/single?client=gtx&sl=" + _sl + "&tl=pl&dt=t&q=" + encodeURIComponent(text));
     if (!r.ok)
         throw new Error("google");
     const d = await r.json();
@@ -178,8 +179,9 @@ async function viaGoogle(text) {
         throw new Error("google shape");
     return d[0].map(s => (s && s[0]) || "").join("").trim();
 }
-async function viaGoogleDetailed(text) {
-    const r = await fetch("https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=pl&dt=t&dt=bd&q=" + encodeURIComponent(text));
+async function viaGoogleDetailed(text, lang) {
+    const _sl = lang === "nl" ? "nl" : "en";
+    const r = await fetch("https://translate.googleapis.com/translate_a/single?client=gtx&sl=" + _sl + "&tl=pl&dt=t&dt=bd&q=" + encodeURIComponent(text));
     if (!r.ok)
         throw new Error("google");
     const d = await r.json();
@@ -201,10 +203,10 @@ async function viaGoogleDetailed(text) {
     }
     return { best, alts };
 }
-async function translate(text) {
+async function translate(text, lang) {
     if (!text || !text.trim())
         return "";
-    return await viaGoogle(text);
+    return await viaGoogle(text, lang);
 }
 function cleanPolish(v) {
     v = String(v || "").trim();
@@ -218,7 +220,7 @@ function cleanPolish(v) {
         return "";
     return v;
 }
-async function translateDetailed(text) {
+async function translateDetailed(text, lang) {
     let best = "";
     const alts = [];
     const seen = {};
@@ -227,7 +229,7 @@ async function translateDetailed(text) {
         return; const lc = v.toLowerCase(); if (seen[lc])
         return; seen[lc] = 1; alts.push(v); };
     try {
-        const g = await viaGoogleDetailed(text);
+        const g = await viaGoogleDetailed(text, lang);
         if (g.best) {
             best = g.best;
             seen[best.toLowerCase()] = 1;
@@ -238,7 +240,7 @@ async function translateDetailed(text) {
     catch (e) { }
     if (!best) {
         try {
-            best = await viaGoogle(text);
+            best = await viaGoogle(text, lang);
         }
         catch (e) { }
     }
@@ -263,7 +265,11 @@ function cefrFromFreq(f) {
         return "C1";
     return "C2";
 }
-async function wordInfo(word) {
+async function wordInfo(word, lang) {
+    if (lang === "nl") {
+        const w = String(word || "").toLowerCase().trim();
+        return { exists: true, freq: 0, level: NL_CEFR[w] || "" };
+    }
     try {
         const w = word.toLowerCase().trim();
         const r = await fetch("https://api.datamuse.com/words?max=1&md=f&sp=" + encodeURIComponent(w));
@@ -399,7 +405,9 @@ async function resolveInflection(w, pos){
     for (const c of cands) { if (await existsVerbDict(c[0])) return { lemma: c[0], kind: c[1] }; }
     return null;
 }
-async function fetchDict(word) {
+async function fetchDict(word, lang) {
+    if (lang === "nl")
+        return await fetchDictNL(word);
     try {
         const r = await fetch("https://api.dictionaryapi.dev/api/v2/entries/en/" + encodeURIComponent(word.toLowerCase().trim()));
         if (!r.ok)
@@ -477,7 +485,9 @@ function phraseKind(s) {
         return "phrasal verb";
     return "idiom / wyrażenie";
 }
-async function wiktionaryPhrases(word) {
+async function wiktionaryPhrases(word, lang) {
+    if (lang === "nl")
+        return [];
     try {
         const w = String(word || "").toLowerCase().trim();
         if (!w || /\s/.test(w) || w.length < 3)
@@ -530,7 +540,8 @@ function cleanWikiInline(s){
     s = s.replace(/\s+/g, " ").trim();
     return s;
 }
-async function wiktionaryExample(word){
+async function wiktionaryExample(word, lang){
+    if (lang === "nl") return "";
     try {
         const w = String(word || "").toLowerCase().trim();
         if (!w || /\s/.test(w) || w.length < 2) return "";
@@ -562,25 +573,26 @@ async function wiktionaryExample(word){
         return cands.find(c => re.test(c)) || cands[0];
     } catch (e) { return ""; }
 }
-async function lookupWord({ word, sentence }) {
+async function lookupWord({ word, sentence, lang }) {
+    const _lang = lang === "nl" ? "nl" : "en";
     const hasSentence = sentence && sentence.trim().length > 0;
     const clean = word.trim();
     const isPhrase = /\s/.test(clean);
-    const [dict, detail, info] = await Promise.all([isPhrase ? Promise.resolve({}) : fetchDict(clean), translateDetailed(clean), isPhrase ? Promise.resolve({ exists: false, freq: 0, level: "" }) : wordInfo(clean)]);
+    const [dict, detail, info] = await Promise.all([isPhrase ? Promise.resolve({}) : fetchDict(clean, _lang), translateDetailed(clean, _lang), isPhrase ? Promise.resolve({ exists: false, freq: 0, level: "" }) : wordInfo(clean, _lang)]);
     const surfRe = new RegExp("\\b" + clean.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
     let exArr = (!isPhrase && Array.isArray(dict.examples)) ? dict.examples.slice() : [];
     if (exArr.length > 1)
         exArr.sort((a, b) => (surfRe.test(b) ? 1 : 0) - (surfRe.test(a) ? 1 : 0));
     let autoSrc = hasSentence ? sentence.trim() : (exArr[0] || dict.example || "");
     if (!hasSentence && !isPhrase && !autoSrc) {
-        try { autoSrc = await wiktionaryExample(clean); } catch (e) { autoSrc = ""; }
+        try { autoSrc = await wiktionaryExample(clean, _lang); } catch (e) { autoSrc = ""; }
     }
     const src = autoSrc;
     const exampleAlts = (!hasSentence) ? exArr.filter(x => x !== src).slice(0, 3) : [];
     let sentencePl = "";
     if (src) {
         try {
-            sentencePl = await translate(src);
+            sentencePl = await translate(src, _lang);
         }
         catch {
             sentencePl = "";
@@ -599,8 +611,152 @@ async function lookupWord({ word, sentence }) {
     }
     alts = alts.filter(a => a.toLowerCase() !== pl.toLowerCase()).slice(0, 5);
     const pos = isPhrase ? phraseKind(clean) : (dict.pos ? (POS_PL[dict.pos] || dict.pos) : "");
-    return { id: uid(), word: clean, queried: clean, ipa: dict.ipa || "", pos: pos, pl: pl, alts: alts, level: info.level || "", note: "", lemma: dict.lemma || "", lemmaKind: dict.lemmaKind || "", sentence: src, sentencePl, exampleAlts: exampleAlts, audio: dict.audio || "", fromBook: !!hasSentence, createdAt: Date.now(), phrase: isPhrase };
+    return { id: uid(), word: clean, queried: clean, ipa: dict.ipa || "", pos: pos, pl: pl, alts: alts, level: info.level || "", note: "", lemma: dict.lemma || "", lemmaKind: dict.lemmaKind || "", sentence: src, sentencePl, exampleAlts: exampleAlts, audio: dict.audio || "", fromBook: !!hasSentence, createdAt: Date.now(), phrase: isPhrase, lang: _lang };
 }
+/* ===== Nederlands (NL) ===== */
+const NL_POS_MAP = { "Noun": "noun", "Proper noun": "noun", "Verb": "verb", "Adjective": "adjective", "Adverb": "adverb", "Pronoun": "pronoun", "Preposition": "preposition", "Postposition": "preposition", "Conjunction": "conjunction", "Interjection": "interjection", "Numeral": "numeral", "Article": "article", "Determiner": "determiner", "Participle": "adjective" };
+const NL_IRREGULAR = {
+"was":["zijn","forma czasu przeszłego"],"waren":["zijn","forma czasu przeszłego"],"geweest":["zijn","imiesłów bierny"],
+"had":["hebben","forma czasu przeszłego"],"hadden":["hebben","forma czasu przeszłego"],"gehad":["hebben","imiesłów bierny"],
+"werd":["worden","forma czasu przeszłego"],"werden":["worden","forma czasu przeszłego"],"geworden":["worden","imiesłów bierny"],
+"kon":["kunnen","forma czasu przeszłego"],"konden":["kunnen","forma czasu przeszłego"],"gekund":["kunnen","imiesłów bierny"],
+"mocht":["mogen","forma czasu przeszłego"],"mochten":["mogen","forma czasu przeszłego"],"gemogen":["mogen","imiesłów bierny"],
+"moest":["moeten","forma czasu przeszłego"],"moesten":["moeten","forma czasu przeszłego"],"gemoeten":["moeten","imiesłów bierny"],
+"wilde":["willen","forma czasu przeszłego"],"wilden":["willen","forma czasu przeszłego"],"wou":["willen","forma czasu przeszłego"],"gewild":["willen","imiesłów bierny"],
+"zou":["zullen","forma czasu przeszłego"],"zouden":["zullen","forma czasu przeszłego"],
+"ging":["gaan","forma czasu przeszłego"],"gingen":["gaan","forma czasu przeszłego"],"gegaan":["gaan","imiesłów bierny"],
+"stond":["staan","forma czasu przeszłego"],"stonden":["staan","forma czasu przeszłego"],"gestaan":["staan","imiesłów bierny"],
+"deed":["doen","forma czasu przeszłego"],"deden":["doen","forma czasu przeszłego"],"gedaan":["doen","imiesłów bierny"],
+"zag":["zien","forma czasu przeszłego"],"zagen":["zien","forma czasu przeszłego"],"gezien":["zien","imiesłów bierny"],
+"sloeg":["slaan","forma czasu przeszłego"],"sloegen":["slaan","forma czasu przeszłego"],"geslagen":["slaan","imiesłów bierny"],
+"kwam":["komen","forma czasu przeszłego"],"kwamen":["komen","forma czasu przeszłego"],"gekomen":["komen","imiesłów bierny"],
+"nam":["nemen","forma czasu przeszłego"],"namen":["nemen","forma czasu przeszłego"],"genomen":["nemen","imiesłów bierny"],
+"gaf":["geven","forma czasu przeszłego"],"gaven":["geven","forma czasu przeszłego"],"gegeven":["geven","imiesłów bierny"],
+"las":["lezen","forma czasu przeszłego"],"lazen":["lezen","forma czasu przeszłego"],"gelezen":["lezen","imiesłów bierny"],
+"at":["eten","forma czasu przeszłego"],"aten":["eten","forma czasu przeszłego"],"gegeten":["eten","imiesłów bierny"],
+"wist":["weten","forma czasu przeszłego"],"wisten":["weten","forma czasu przeszłego"],"geweten":["weten","imiesłów bierny"],
+"lag":["liggen","forma czasu przeszłego"],"lagen":["liggen","forma czasu przeszłego"],"gelegen":["liggen","imiesłów bierny"],
+"zat":["zitten","forma czasu przeszłego"],"zaten":["zitten","forma czasu przeszłego"],"gezeten":["zitten","imiesłów bierny"],
+"sprak":["spreken","forma czasu przeszłego"],"spraken":["spreken","forma czasu przeszłego"],"gesproken":["spreken","imiesłów bierny"],
+"brak":["breken","forma czasu przeszłego"],"braken":["breken","forma czasu przeszłego"],"gebroken":["breken","imiesłów bierny"],
+"stak":["steken","forma czasu przeszłego"],"gestoken":["steken","imiesłów bierny"],
+"hielp":["helpen","forma czasu przeszłego"],"hielpen":["helpen","forma czasu przeszłego"],"geholpen":["helpen","imiesłów bierny"],
+"stierf":["sterven","forma czasu przeszłego"],"gestorven":["sterven","imiesłów bierny"],
+"wierp":["werpen","forma czasu przeszłego"],"geworpen":["werpen","imiesłów bierny"],
+"vond":["vinden","forma czasu przeszłego"],"vonden":["vinden","forma czasu przeszłego"],"gevonden":["vinden","imiesłów bierny"],
+"bond":["binden","forma czasu przeszłego"],"gebonden":["binden","imiesłów bierny"],
+"dronk":["drinken","forma czasu przeszłego"],"dronken":["drinken","forma czasu przeszłego"],"gedronken":["drinken","imiesłów bierny"],
+"zong":["zingen","forma czasu przeszłego"],"zongen":["zingen","forma czasu przeszłego"],"gezongen":["zingen","imiesłów bierny"],
+"sprong":["springen","forma czasu przeszłego"],"gesprongen":["springen","imiesłów bierny"],
+"begon":["beginnen","forma czasu przeszłego"],"begonnen":["beginnen","imiesłów bierny"],
+"won":["winnen","forma czasu przeszłego"],"gewonnen":["winnen","imiesłów bierny"],
+"zwom":["zwemmen","forma czasu przeszłego"],"gezwommen":["zwemmen","imiesłów bierny"],
+"liep":["lopen","forma czasu przeszłego"],"liepen":["lopen","forma czasu przeszłego"],"gelopen":["lopen","imiesłów bierny"],
+"riep":["roepen","forma czasu przeszłego"],"geroepen":["roepen","imiesłów bierny"],
+"sliep":["slapen","forma czasu przeszłego"],"geslapen":["slapen","imiesłów bierny"],
+"liet":["laten","forma czasu przeszłego"],"lieten":["laten","forma czasu przeszłego"],"gelaten":["laten","imiesłów bierny"],
+"viel":["vallen","forma czasu przeszłego"],"vielen":["vallen","forma czasu przeszłego"],"gevallen":["vallen","imiesłów bierny"],
+"hield":["houden","forma czasu przeszłego"],"hielden":["houden","forma czasu przeszłego"],"gehouden":["houden","imiesłów bierny"],
+"hing":["hangen","forma czasu przeszłego"],"gehangen":["hangen","imiesłów bierny"],
+"ving":["vangen","forma czasu przeszłego"],"gevangen":["vangen","imiesłów bierny"],
+"droeg":["dragen","forma czasu przeszłego"],"droegen":["dragen","forma czasu przeszłego"],"gedragen":["dragen","imiesłów bierny"],
+"voer":["varen","forma czasu przeszłego"],"gevaren":["varen","imiesłów bierny"],
+"bleef":["blijven","forma czasu przeszłego"],"bleven":["blijven","forma czasu przeszłego"],"gebleven":["blijven","imiesłów bierny"],
+"schreef":["schrijven","forma czasu przeszłego"],"schreven":["schrijven","forma czasu przeszłego"],"geschreven":["schrijven","imiesłów bierny"],
+"reed":["rijden","forma czasu przeszłego"],"reden":["rijden","forma czasu przeszłego"],"gereden":["rijden","imiesłów bierny"],
+"sneed":["snijden","forma czasu przeszłego"],"gesneden":["snijden","imiesłów bierny"],
+"keek":["kijken","forma czasu przeszłego"],"keken":["kijken","forma czasu przeszłego"],"gekeken":["kijken","imiesłów bierny"],
+"bleek":["blijken","forma czasu przeszłego"],"gebleken":["blijken","imiesłów bierny"],
+"steeg":["stijgen","forma czasu przeszłego"],"gestegen":["stijgen","imiesłów bierny"],
+"zweeg":["zwijgen","forma czasu przeszłego"],"gezwegen":["zwijgen","imiesłów bierny"],
+"kreeg":["krijgen","forma czasu przeszłego"],"kregen":["krijgen","forma czasu przeszłego"],"gekregen":["krijgen","imiesłów bierny"],
+"greep":["grijpen","forma czasu przeszłego"],"gegrepen":["grijpen","imiesłów bierny"],
+"beet":["bijten","forma czasu przeszłego"],"gebeten":["bijten","imiesłów bierny"],
+"verdween":["verdwijnen","forma czasu przeszłego"],"verdwenen":["verdwijnen","imiesłów bierny"],
+"scheen":["schijnen","forma czasu przeszłego"],"geschenen":["schijnen","imiesłów bierny"],
+"verloor":["verliezen","forma czasu przeszłego"],"verloren":["verliezen","imiesłów bierny"],
+"koos":["kiezen","forma czasu przeszłego"],"kozen":["kiezen","forma czasu przeszłego"],"gekozen":["kiezen","imiesłów bierny"],
+"bood":["bieden","forma czasu przeszłego"],"geboden":["bieden","imiesłów bierny"],
+"goot":["gieten","forma czasu przeszłego"],"gegoten":["gieten","imiesłów bierny"],
+"schoot":["schieten","forma czasu przeszłego"],"geschoten":["schieten","imiesłów bierny"],
+"sloot":["sluiten","forma czasu przeszłego"],"gesloten":["sluiten","imiesłów bierny"],
+"vloog":["vliegen","forma czasu przeszłego"],"gevlogen":["vliegen","imiesłów bierny"],
+"boog":["buigen","forma czasu przeszłego"],"gebogen":["buigen","imiesłów bierny"],
+"rook":["ruiken","forma czasu przeszłego"],"geroken":["ruiken","imiesłów bierny"],
+"dook":["duiken","forma czasu przeszłego"],"gedoken":["duiken","imiesłów bierny"],
+"trok":["trekken","forma czasu przeszłego"],"trokken":["trekken","forma czasu przeszłego"],"getrokken":["trekken","imiesłów bierny"],
+"zocht":["zoeken","forma czasu przeszłego"],"zochten":["zoeken","forma czasu przeszłego"],"gezocht":["zoeken","imiesłów bierny"],
+"kocht":["kopen","forma czasu przeszłego"],"kochten":["kopen","forma czasu przeszłego"],"gekocht":["kopen","imiesłów bierny"],
+"bracht":["brengen","forma czasu przeszłego"],"brachten":["brengen","forma czasu przeszłego"],"gebracht":["brengen","imiesłów bierny"],
+"dacht":["denken","forma czasu przeszłego"],"dachten":["denken","forma czasu przeszłego"],"gedacht":["denken","imiesłów bierny"],
+"woog":["wegen","forma czasu przeszłego"],"gewogen":["wegen","imiesłów bierny"],
+"bewoog":["bewegen","forma czasu przeszłego"],"bewogen":["bewegen","imiesłów bierny"],
+"schoor":["scheren","forma czasu przeszłego"],"geschoren":["scheren","imiesłów bierny"],
+"trof":["treffen","forma czasu przeszłego"],"getroffen":["treffen","imiesłów bierny"],
+"schrok":["schrikken","forma czasu przeszłego"],"geschrokken":["schrikken","imiesłów bierny"],
+"schiep":["scheppen","forma czasu przeszłego"],"geschapen":["scheppen","imiesłów bierny"],
+"prees":["prijzen","forma czasu przeszłego"],"geprezen":["prijzen","imiesłów bierny"],
+"wees":["wijzen","forma czasu przeszłego"],"gewezen":["wijzen","imiesłów bierny"],
+"gewassen":["wassen","imiesłów bierny"],"gelachen":["lachen","imiesłów bierny"]
+};
+function nlLemma(w){ w = String(w || "").toLowerCase().trim(); const e = NL_IRREGULAR[w]; if (!e) return null; if (e[0] === w) return null; return { lemma: e[0], lemmaKind: e[1] }; }
+function nlDutchSection(wt){
+    const t = "\n" + String(wt || "");
+    const m = /\n==\s*Dutch\s*==\s*\n([\s\S]*?)(?=\n==[^=]|$)/i.exec(t);
+    return m ? m[1] : "";
+}
+function nlUx(line){
+    const m = /\{\{ux[i]?\|nl\|([^}]*)\}\}/i.exec(line);
+    if (m){ let first = (m[1] || "").split("|").filter(p => p.indexOf("=") < 0)[0] || ""; return cleanWikiInline(first.replace(/^1=/, "")); }
+    const m2 = /^#[:*]+\s*(.+)$/.exec(line);
+    if (m2){ const x = cleanWikiInline(m2[1]); if (x && !/^\(/.test(x)) return x; }
+    return "";
+}
+async function fetchDictNL(word){
+    const w = String(word || "").toLowerCase().trim();
+    const out = { ipa: "", pos: "", example: "", examples: [], defs: [], audio: "", lemma: "", lemmaKind: "" };
+    if (!w) return out;
+    try {
+        const r = await fetch("https://en.wiktionary.org/w/api.php?action=parse&page=" + encodeURIComponent(w) + "&prop=wikitext&format=json&redirects=1&origin=*");
+        if (r.ok){
+            const d = await r.json();
+            const wt = (d && d.parse && d.parse.wikitext && d.parse.wikitext["*"]) ? String(d.parse.wikitext["*"]) : "";
+            const sec = nlDutchSection(wt);
+            if (sec){
+                const ipaM = /\{\{IPA\|nl\|([^}|]+)/i.exec(sec);
+                if (ipaM) out.ipa = ipaM[1].trim();
+                let curPos = "";
+                for (const ln of sec.split("\n")){
+                    const h = /^={3,}\s*([^=]+?)\s*={3,}\s*$/.exec(ln);
+                    if (h){ curPos = NL_POS_MAP[h[1].trim()] || ""; continue; }
+                    if (/^#[^:*]/.test(ln) || ln.trim() === "#"){
+                        if (!curPos) continue;
+                        const def = cleanWikiInline(ln.replace(/^#+\s*/, ""));
+                        if (def && /[a-zA-Z]/.test(def) && def.length <= 200) out.defs.push({ pos: curPos, definition: def, example: "" });
+                    } else if (/^#[:*]/.test(ln)){
+                        const ex = nlUx(ln);
+                        if (ex && ex.length >= 4 && ex.length <= 200){
+                            if (out.defs.length && !out.defs[out.defs.length - 1].example) out.defs[out.defs.length - 1].example = ex;
+                            if (out.examples.indexOf(ex) < 0) out.examples.push(ex);
+                        }
+                    }
+                }
+                if (out.defs[0]) out.pos = out.defs[0].pos;
+            }
+        }
+    } catch (e) { }
+    const lem = nlLemma(w);
+    if (lem){ out.lemma = lem.lemma; out.lemmaKind = lem.lemmaKind; }
+    out.defs = out.defs.slice(0, 12);
+    out.example = out.examples[0] || "";
+    return out;
+}
+const NL_CEFR = {};
+[["A1","ik jij je hij zij ze wij we het de een en of maar niet geen ja nee goed dag hallo man vrouw kind huis water brood eten drinken gaan komen zijn hebben doen zien weten groot klein mooi nieuw oud dit dat hier daar nu vandaag morgen wie wat waar hoe waarom tijd jaar nacht hand oog naam vriend school boek tafel deur straat stad land veel weinig meer heel erg ook altijd nooit soms met zonder voor na op in uit aan bij tot geld werk wonen spreken praten lezen schrijven kopen geven nemen vinden maken kijken luisteren slapen lopen rijden"],
+["A2","misschien natuurlijk eigenlijk meestal bijna genoeg verschillend belangrijk moeilijk makkelijk gemakkelijk gezond ziek moe blij boos bang verdrietig gelukkig samen alleen tussen tijdens gisteren volgende vorige ieder elke iemand niemand iets niets alles weer gebeuren proberen beginnen stoppen betalen helpen vragen antwoorden begrijpen vergeten onthouden gebruiken veranderen verwachten geloven hopen wachten blijven worden laten houden brengen zoeken reizen familie ouders regen zon wolk"],
+["B1","hoewel ondanks waardoor waarbij tenzij zodra terwijl echter bovendien daarom dus immers namelijk vervolgens uiteindelijk ontwikkeling samenleving overheid invloed gevolg oorzaak mogelijkheid ervaring mening gedrag verband oplossing probleem voorbeeld verschil betekenis waarde gemiddeld voldoende dergelijk aanzienlijk nauwelijks wellicht beschouwen beschrijven benadrukken veroorzaken vermijden bereiken beschikken betreffen toenemen afnemen verbeteren ontstaan ontwikkelen"]
+].forEach(function(pair){ pair[1].split(" ").forEach(function(w){ if (w && !NL_CEFR[w]) NL_CEFR[w] = pair[0]; }); });
+
 async function olSearch(q) {
     try {
         const r = await fetch("https://openlibrary.org/search.json?limit=6&fields=title,author_name,cover_i,key&title=" + encodeURIComponent(q));
@@ -721,7 +877,8 @@ async function gbCovers(title, author) {
         return [];
     }
 }
-async function suggestWord(w) {
+async function suggestWord(w, lang) {
+    if (lang === "nl") return [];
     try {
         const r = await fetch("https://api.datamuse.com/sug?max=6&s=" + encodeURIComponent(w));
         if (!r.ok)
@@ -756,7 +913,7 @@ catch { } }
 if (typeof window !== "undefined") {
     window.addEventListener("pointerdown", unlockSpeech, { once: true });
 }
-function speakBrowser(word) {
+function speakBrowser(word, lang) {
     try {
         const synth = window.speechSynthesis;
         if (!synth)
@@ -765,9 +922,12 @@ function speakBrowser(word) {
         if (!_voices.length)
             loadVoices();
         const u = new SpeechSynthesisUtterance(word);
-        u.lang = "en-US";
+        const _nl = lang === "nl";
+        u.lang = _nl ? "nl-NL" : "en-US";
         u.rate = .95;
-        const v = _voices.find(x => /^en[-_]/i.test(x.lang)) || _voices.find(x => /en/i.test(x.lang));
+        const v = _nl
+            ? (_voices.find(x => /^nl[-_]/i.test(x.lang)) || _voices.find(x => /nl/i.test(x.lang)))
+            : (_voices.find(x => /^en[-_]/i.test(x.lang)) || _voices.find(x => /en/i.test(x.lang)));
         if (v)
             u.voice = v;
         synth.speak(u);
@@ -784,15 +944,15 @@ function playPronunciation(entry, setSt) {
         try {
             const a = new Audio(entry.audio);
             a.onended = done;
-            a.onerror = () => { speakBrowser(entry.word); done(); };
+            a.onerror = () => { speakBrowser(entry.word, entry.lang); done(); };
             const p = a.play();
             if (p && p.catch)
-                p.catch(() => { speakBrowser(entry.word); done(); });
+                p.catch(() => { speakBrowser(entry.word, entry.lang); done(); });
             return;
         }
         catch { }
     }
-    speakBrowser(entry.word);
+    speakBrowser(entry.word, entry.lang);
     setTimeout(done, 1100);
 }
 function levelColor(l) { const c = { A1: "#3E7D00", A2: "#3E7D00", B1: "#B8791B", B2: "#B8791B", C1: "#7B2D26", C2: "#7B2D26" }; return c[l] || "#56604A"; }
@@ -1252,7 +1412,8 @@ function Flashcards({ book, onClose }) {
                 React.createElement("button", { onClick: () => setFlipped(f => !f), className: "lex-primary", style: { height: 56, padding: "0 22px", borderRadius: 16, border: "none", background: C.lime, color: C.ink, fontSize: 15, fontWeight: 800, cursor: "pointer" } }, "odwr\u00F3\u0107"),
                 React.createElement("button", { onClick: () => go(1), className: "lex-primary", style: { width: 56, height: 56, borderRadius: 16, border: "none", background: C.paperDeep, color: C.ink, fontSize: 24, cursor: "pointer" } }, "\u203A"))))));
 }
-function EntryEdit({ entry, onClose, onSave }) {
+function EntryEdit({ entry, onClose, onSave, lang }) {
+    const _lang = (entry && entry.lang) || lang || "en";
     const [wordText, setWordText] = useState(entry.word || "");
     const [pl, setPl] = useState(entry.pl || "");
     const [sentence, setSentence] = useState(entry.sentence || "");
@@ -1269,7 +1430,7 @@ function EntryEdit({ entry, onClose, onSave }) {
         }
         setLoadingDefs(true);
         defWordRef.current = w;
-        fetchDict(w).then(function (d) { if (defWordRef.current !== w)
+        fetchDict(w, _lang).then(function (d) { if (defWordRef.current !== w)
             return; setDefs((d && d.defs) || []); setLoadingDefs(false); }).catch(function () { if (defWordRef.current === w)
             setLoadingDefs(false); });
     };
@@ -1284,12 +1445,12 @@ function EntryEdit({ entry, onClose, onSave }) {
     const save = async function () {
         setSaving(true);
         const w2 = wordText.trim() || entry.word;
-        const patch = { pl: pl.trim() || entry.pl, note: note.trim(), definition: definition };
+        const patch = { pl: pl.trim() || entry.pl, note: note.trim(), definition: definition, lang: _lang };
         const st = sentence.trim();
         let sentencePl = entry.sentencePl || "";
         if (st && st !== (entry.sentence || "").trim()) {
             try {
-                sentencePl = await translate(st);
+                sentencePl = await translate(st, _lang);
             }
             catch (e) { }
         }
@@ -1312,7 +1473,7 @@ function EntryEdit({ entry, onClose, onSave }) {
             }
             else {
                 try {
-                    const [d, info] = await Promise.all([fetchDict(w2), wordInfo(w2)]);
+                    const [d, info] = await Promise.all([fetchDict(w2, _lang), wordInfo(w2, _lang)]);
                     patch.ipa = (d && d.ipa) || "";
                     patch.audio = (d && d.audio) || "";
                     patch.pos = (d && d.pos) ? (POS_PL[d.pos] || d.pos) : "";
@@ -1368,7 +1529,8 @@ function FanIcon({ size }) {
             React.createElement("rect", { x: 7.5, y: 6, width: 9, height: 13, rx: 1.6, fill: "#FFFFFF", transform: "rotate(-1 12 18)" }),
             React.createElement("rect", { x: 7.5, y: 6.5, width: 9, height: 12.5, rx: 1.6, fill: "#F4F8EA", transform: "rotate(18 12 18)" }))));
 }
-function WordSheet({ word, entry, onClose }) {
+function WordSheet({ word, entry, onClose, lang }) {
+    const _lang = (entry && entry.lang) || lang || "en";
     const [defs, setDefs] = useState([]);
     const [meta, setMeta] = useState({ ipa: (entry && entry.ipa) || "", pos: (entry && entry.pos) || "", audio: (entry && entry.audio) || "" });
     const [loading, setLoading] = useState(false);
@@ -1378,7 +1540,7 @@ function WordSheet({ word, entry, onClose }) {
         if (!w || isPhrase) return;
         let ok = true;
         setLoading(true);
-        fetchDict(w).then(function (d) {
+        fetchDict(w, _lang).then(function (d) {
             if (!ok) return;
             setDefs((d && d.defs) || []);
             setMeta(function (m) { return { ipa: m.ipa || (d && d.ipa) || "", pos: m.pos || ((d && d.pos) ? (POS_PL[d.pos] || d.pos) : ""), audio: m.audio || (d && d.audio) || "" }; });
@@ -1387,7 +1549,7 @@ function WordSheet({ word, entry, onClose }) {
         return function () { ok = false; };
     }, [w]);
     const spkEntry = entry || { word: w, audio: meta.audio };
-    const cam = cambridgeUrl(w);
+    const cam = _lang === "nl" ? ("https://en.wiktionary.org/wiki/" + encodeURIComponent(String(w).trim().replace(/\s+/g, "_")) + "#Dutch") : cambridgeUrl(w);
     return (React.createElement("div", { className: "lex-modal-bg", onClick: onClose },
         React.createElement("div", { className: "lex-modal", onClick: function (e) { e.stopPropagation(); }, style: { maxWidth: 460 } },
             React.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 10 } },
@@ -1409,12 +1571,12 @@ function WordSheet({ word, entry, onClose }) {
                             d.definition),
                         d.example && React.createElement("div", { style: { fontSize: 13, fontStyle: "italic", color: C.inkSoft, marginTop: 4, lineHeight: 1.45 } }, React.createElement(MarkWord, { text: d.example, word: w })));
                 }),
-                !loading && defs.length === 0 && React.createElement("div", { style: { fontSize: 13, color: C.inkSoft, lineHeight: 1.5 } }, isPhrase ? "to wyrażenie — pełne wyjaśnienie znajdziesz w Cambridge." : "brak definicji w słowniku offline — otwórz w Cambridge po pełną definicję.")),
+                !loading && defs.length === 0 && React.createElement("div", { style: { fontSize: 13, color: C.inkSoft, lineHeight: 1.5 } }, isPhrase ? "to wyrażenie — pełne wyjaśnienie otworzysz w słowniku poniżej." : "brak definicji offline — otwórz pełny słownik poniżej.")),
             entry && entry.sentence && React.createElement("div", { style: { marginTop: 14, borderLeft: "3px solid " + C.lime, paddingLeft: 12 } },
                 React.createElement("p", { style: { margin: 0, fontStyle: "italic", fontSize: 14.5, lineHeight: 1.5, color: C.ink } }, React.createElement(MarkWord, { text: entry.sentence, word: entry.queried || w })),
                 entry.sentencePl && React.createElement("p", { style: { margin: "5px 0 0", fontSize: 13, color: C.inkSoft, lineHeight: 1.5 } }, entry.sentencePl)),
             React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 16 } },
-                React.createElement("a", { href: cam, target: "_blank", rel: "noopener noreferrer", className: "lex-primary", style: { flex: 1, textAlign: "center", textDecoration: "none", padding: "12px", borderRadius: 11, border: "1px solid " + C.ink, background: "transparent", color: C.ink, fontSize: 14.5, fontWeight: 700 } }, "otwórz w Cambridge ↗"),
+                React.createElement("a", { href: cam, target: "_blank", rel: "noopener noreferrer", className: "lex-primary", style: { flex: 1, textAlign: "center", textDecoration: "none", padding: "12px", borderRadius: 11, border: "1px solid " + C.ink, background: "transparent", color: C.ink, fontSize: 14.5, fontWeight: 700 } }, _lang === "nl" ? "otwórz w Wiktionary ↗" : "otwórz w Cambridge ↗"),
                 React.createElement("button", { onClick: onClose, className: "lex-primary", style: { padding: "12px 16px", borderRadius: 11, border: "none", background: C.lime, color: C.ink, fontSize: 14.5, fontWeight: 800, cursor: "pointer" } }, "zamknij")))));
 }
 function App() {
@@ -1442,6 +1604,8 @@ function App() {
     const [entryMode, setEntryMode] = useState("recent");
     const [azLetter, setAzLetter] = useState("");
     const [query, setQuery] = useState("");
+    const [lang, setLang] = useState(() => { try { return localStorage.getItem("czytelnia:lang") === "nl" ? "nl" : "en"; } catch (e) { return "en"; } });
+    useEffect(() => { try { localStorage.setItem("czytelnia:lang", lang); } catch (e) { } }, [lang]);
     const scrollRef = useRef(null);
     const wordRef = useRef(null);
     const sentenceRef = useRef(null);
@@ -1524,7 +1688,12 @@ function App() {
         pushT.current = setTimeout(() => { doc.set(lib).then(() => setSyncState("zsynchronizowano")).catch(e => { console.error(e); setSyncState("błąd zapisu"); }); }, 400);
     }, []);
     const setAndPersist = useCallback((updater) => { setBooks(prev => { const next = typeof updater === "function" ? updater(prev) : updater; commit(next, poolRef.current); return next; }); }, [commit]);
-    const activeBook = books.find(b => b.id === activeId) || null;
+    const langBooks = books.filter(b => (b.lang || "en") === lang);
+    useEffect(() => {
+        if (langBooks.length === 0) { if (activeId !== null) setActiveId(null); return; }
+        if (!langBooks.some(b => b.id === activeId)) setActiveId(langBooks[0].id);
+    }, [lang, books]);
+    const activeBook = langBooks.find(b => b.id === activeId) || null;
     const entries = activeBook ? activeBook.entries : [];
     useEffect(() => { const el = scrollRef.current; if (el && entryMode === "recent")
         el.scrollTop = 0; }, [entries.length, activeId, entryMode]);
@@ -1535,10 +1704,10 @@ function App() {
             return;
         }
         let cancel = false;
-        const t = setTimeout(async () => { const p = await wiktionaryPhrases(w); if (!cancel)
+        const t = setTimeout(async () => { const p = await wiktionaryPhrases(w, lang); if (!cancel)
             setPhraseSug(p); }, 650);
         return () => { cancel = true; clearTimeout(t); };
-    }, [word]);
+    }, [word, lang]);
     useEffect(() => {
         const w = word.trim().toLowerCase();
         if (w.length < 3 || w.indexOf(" ") >= 0) {
@@ -1547,22 +1716,22 @@ function App() {
         }
         let cancel = false;
         const t = setTimeout(async () => {
-            const info = await wordInfo(w);
+            const info = await wordInfo(w, lang);
             if (cancel)
                 return;
             if (info.exists) {
                 setSug([]);
                 return;
             }
-            const su = await suggestWord(w);
+            const su = await suggestWord(w, lang);
             if (cancel)
                 return;
             setSug(su.filter(x => x.toLowerCase() !== w).slice(0, 4));
         }, 320);
         return () => { cancel = true; clearTimeout(t); };
-    }, [word]);
+    }, [word, lang]);
     const addBook = (data) => {
-        const b = { id: uid(), title: data.title, author: data.author || "", cover: data.cover || "", pages: data.pages || 0, spineColor: data.spineColor || "", spineShade: data.spineShade || "", createdAt: Date.now(), touchedAt: Date.now(), entries: [] };
+        const b = { id: uid(), title: data.title, author: data.author || "", cover: data.cover || "", pages: data.pages || 0, spineColor: data.spineColor || "", spineShade: data.spineShade || "", lang: lang, createdAt: Date.now(), touchedAt: Date.now(), entries: [] };
         setAndPersist(prev => [b, ...prev]);
         setActiveId(b.id);
         setShowAdd(false);
@@ -1605,7 +1774,7 @@ function App() {
             }
         } return { ...e, pl: newPl, alts: uniq.slice(0, 4) }; }) } : b)); };
     const pickExample = async (eid, text) => { let pl = ""; try {
-        pl = await translate(text);
+        pl = await translate(text, activeBook ? activeBook.lang : lang);
     }
     catch {
         pl = "";
@@ -1619,7 +1788,7 @@ function App() {
         setError("");
         setSug([]);
         try {
-            const entry = await lookupWord({ word: w, sentence });
+            const entry = await lookupWord({ word: w, sentence, lang: activeBook ? activeBook.lang : lang });
             setAndPersist(prev => prev.map(b => b.id === activeId ? { ...b, touchedAt: Date.now(), entries: [...b.entries, entry] } : b));
             setWord("");
             setSentence("");
@@ -1652,7 +1821,7 @@ function App() {
     else {
         view = base.slice().reverse();
     }
-    const allCards = books.reduce((a, b) => a.concat((b.entries || []).map(e => ({ ...e, _src: b.title }))), []).concat((pool || []).map(e => ({ ...e, _src: e.source || "pula" })));
+    const allCards = langBooks.reduce((a, b) => a.concat((b.entries || []).map(e => ({ ...e, _src: b.title, lang: e.lang || b.lang || lang }))), []).concat(lang === "en" ? (pool || []).map(e => ({ ...e, _src: e.source || "pula" })) : []);
     const totalCards = allCards.length;
     const wl = word.trim().toLowerCase();
     let dupNote = "";
@@ -1660,7 +1829,7 @@ function App() {
         if (activeBook.entries.some(e => (e.word || "").toLowerCase() === wl))
             dupNote = "masz już to słowo w tej książce";
         else {
-            const inOthers = books.filter(b => b.id !== activeId && (b.entries || []).some(e => (e.word || "").toLowerCase() === wl)).map(b => b.title);
+            const inOthers = langBooks.filter(b => b.id !== activeId && (b.entries || []).some(e => (e.word || "").toLowerCase() === wl)).map(b => b.title);
             if (inOthers.length)
                 dupNote = "masz je już w: " + inOthers.join(", ");
         }
@@ -1673,21 +1842,22 @@ function App() {
             React.createElement("div", { style: { padding: "22px 20px 12px" } },
                 React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9 } },
                     React.createElement("div", { style: { fontSize: 30, fontWeight: 900, letterSpacing: "-.04em", lineHeight: 1 } }, "czytelnia"),
-                    React.createElement("span", { className: "lex-spark" + (syncBusy ? " sync" : ""), title: syncTitle, style: { fontSize: 19, lineHeight: 1, opacity: syncOff ? 0.4 : 1 } }, syncGlyph))),
+                    React.createElement("span", { className: "lex-spark" + (syncBusy ? " sync" : ""), title: syncTitle, style: { fontSize: 19, lineHeight: 1, opacity: syncOff ? 0.4 : 1 } }, syncGlyph)),
+                React.createElement("div", { style: { display: "flex", gap: 4, marginTop: 12, background: "rgba(11,11,10,.06)", borderRadius: 10, padding: 3 } }, ["en", "nl"].map(L => React.createElement("button", { key: L, onClick: () => setLang(L), style: { flex: 1, border: "none", cursor: "pointer", borderRadius: 8, padding: "6px 0", fontSize: 12.5, fontWeight: 800, letterSpacing: ".08em", background: lang === L ? C.ink : "transparent", color: lang === L ? "#fff" : C.shelfMute } }, L === "en" ? "ENG" : "NL")))),
             React.createElement("div", { style: { padding: "4px 12px 16px", flex: 1 } },
                 React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } },
                     React.createElement("div", { key: "__add", style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
                         React.createElement("div", { style: { height: Math.round(66 * 1.5) + 20, display: "flex", alignItems: "flex-end", justifyContent: "center" } },
                             React.createElement("button", { className: "lex-addtile", onClick: () => setShowAdd(true), style: { width: 66, height: Math.round(66 * 1.5) } }, "+")),
                         React.createElement("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.shelfMute } }, "dodaj")),
-                    books.slice().sort((a, b) => (b.touchedAt || 0) - (a.touchedAt || 0)).map(b => (React.createElement("div", { key: b.id, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
+                    langBooks.slice().sort((a, b) => (b.touchedAt || 0) - (a.touchedAt || 0)).map(b => (React.createElement("div", { key: b.id, style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 7 } },
                         React.createElement("div", { style: { position: "relative" } },
                             React.createElement("div", { onClick: () => cellClick(b.id), onContextMenu: (e) => { e.preventDefault(); setRevealId(b.id); }, style: { touchAction: "manipulation" } },
                                 React.createElement(BookThumb, { book: b, sel: b.id === activeId })),
                             revealId === b.id && React.createElement("button", { className: "lex-book-x", style: { display: "flex" }, onClick: (e) => { e.stopPropagation(); setRevealId(null); deleteBook(b.id); }, "aria-label": "usu\u0144 ksi\u0105\u017Ck\u0119" }, "\u00D7"),
                             revealId === b.id && React.createElement("button", { className: "lex-book-edit", onClick: (e) => { e.stopPropagation(); setRevealId(null); setEditBook(b); }, "aria-label": "edytuj ksi\u0105\u017Ck\u0119" }, "\u270E")),
                         React.createElement("div", { style: { fontSize: 11.5, fontWeight: 700, color: C.shelfText, textAlign: "center", lineHeight: 1.25, wordBreak: "break-word", width: "100%" } }, b.title))))),
-                loaded && books.length === 0 && React.createElement("div", { style: { padding: "14px 4px", fontSize: 13, color: C.shelfMute, lineHeight: 1.5, fontWeight: 600 } }, "brak ksi\u0105\u017Cek. dodaj pierwsz\u0105, \u017Ceby zacz\u0105\u0107 zbiera\u0107 s\u0142owa.")),
+                loaded && langBooks.length === 0 && React.createElement("div", { style: { padding: "14px 4px", fontSize: 13, color: C.shelfMute, lineHeight: 1.5, fontWeight: 600 } }, "brak ksi\u0105\u017Cek. dodaj pierwsz\u0105, \u017Ceby zacz\u0105\u0107 zbiera\u0107 s\u0142owa.")),
             totalCards > 0 && (React.createElement("div", { style: { padding: "14px 16px", borderTop: `1px solid rgba(11,11,10,.1)` } },
                 React.createElement("div", { style: { fontSize: 11, letterSpacing: ".16em", color: C.shelfMute, fontWeight: 800, marginBottom: 8 } }, "FISZKI"),
                 React.createElement("button", { onClick: () => { setShowCardsAll(true); setSidebarOpen(false); }, className: "lex-primary", style: { width: "100%", border: "none", background: C.ink, color: "#fff", fontWeight: 800, fontSize: 13, padding: "11px", borderRadius: 11, cursor: "pointer" } },
@@ -1730,8 +1900,8 @@ function App() {
             activeBook && (React.createElement("div", { style: { borderTop: `1px solid ${C.line}`, background: PANEL_BG, padding: "9px 24px 12px" } },
                 React.createElement("div", { style: { maxWidth: 680, margin: "0 auto" } },
                     error && React.createElement("div", { style: { marginBottom: 10, fontSize: 13, color: C.danger, fontWeight: 600 } }, error),
-                    React.createElement("div", { style: { fontSize: 11, letterSpacing: ".14em", color: C.inkSoft, fontWeight: 700, marginBottom: 5 } }, "en \u2192 pl"),
-                    React.createElement("input", { ref: wordRef, value: word, onChange: (e) => setWord(e.target.value), onKeyDown: onWordKey, placeholder: "s\u0142owo po angielsku", className: "lex-field", autoComplete: "off", autoCapitalize: "none", autoCorrect: "off", spellCheck: false, enterKeyHint: "go", style: { fontSize: 15, fontWeight: 700, padding: "9px 12px" } }),
+                    React.createElement("div", { style: { fontSize: 11, letterSpacing: ".14em", color: C.inkSoft, fontWeight: 700, marginBottom: 5 } }, lang === "nl" ? "nl \u2192 pl" : "en \u2192 pl"),
+                    React.createElement("input", { ref: wordRef, value: word, onChange: (e) => setWord(e.target.value), onKeyDown: onWordKey, placeholder: lang === "nl" ? "s\u0142owo po niderlandzku" : "s\u0142owo po angielsku", className: "lex-field", autoComplete: "off", autoCapitalize: "none", autoCorrect: "off", spellCheck: false, enterKeyHint: "go", style: { fontSize: 15, fontWeight: 700, padding: "9px 12px" } }),
                     sug.length > 0 && (React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 7, marginTop: 8 } },
                         React.createElement("span", { style: { fontSize: 12.5, color: C.inkSoft, fontWeight: 600 } }, "czy chodzi\u0142o ci o:"),
                         sug.map((s, i) => (React.createElement("button", { key: i, onClick: () => { setWord(s); setSug([]); wordRef.current && wordRef.current.focus(); }, className: "lex-primary", style: { border: `1px solid ${C.limeDeep}`, background: "#fff", color: C.olive, fontWeight: 700, fontSize: 13, padding: "4px 10px", borderRadius: 20, cursor: "pointer" } }, s))))),
@@ -1753,8 +1923,8 @@ function App() {
         editBook && React.createElement(BookModal, { initial: editBook, onClose: () => setEditBook(null), onSave: (data) => { updateBook(editBook.id, data); setEditBook(null); } }),
         showCards && activeBook && React.createElement(Flashcards, { book: activeBook, onClose: () => setShowCards(false) }),
         showCardsAll && React.createElement(Flashcards, { book: { title: "wszystkie książki", entries: allCards }, onClose: () => setShowCardsAll(false) }),
-        entryEdit && React.createElement(EntryEdit, { entry: entryEdit, onClose: () => setEntryEdit(null), onSave: updateEntry }),
-        wordSheet && React.createElement(WordSheet, { word: wordSheet.word, entry: wordSheet.entry, onClose: () => setWordSheet(null) }),
+        entryEdit && React.createElement(EntryEdit, { entry: entryEdit, onClose: () => setEntryEdit(null), onSave: updateEntry, lang: activeBook ? activeBook.lang : lang }),
+        wordSheet && React.createElement(WordSheet, { word: wordSheet.word, entry: wordSheet.entry, onClose: () => setWordSheet(null), lang: (wordSheet.entry && wordSheet.entry.lang) || (activeBook ? activeBook.lang : lang) }),
         delBook && (React.createElement("div", { className: "lex-modal-bg", onClick: () => setDelBook(null) },
             React.createElement("div", { className: "lex-modal", onClick: (e) => e.stopPropagation(), style: { maxWidth: 400 } },
                 React.createElement("div", { className: "lex-modal-title" },
@@ -1773,7 +1943,7 @@ function App() {
                     React.createElement("button", { onClick: () => setDelBook(null), className: "lex-primary", style: { padding: "10px", borderRadius: 11, border: "none", background: "transparent", color: C.inkSoft, fontSize: 14, fontWeight: 700, cursor: "pointer" } }, "anuluj")))))));
 }
 function Empty({ kind, onAdd }) {
-    const map = { nobook: { t: "zacznij od książki", d: "każda książka to osobny wątek. dodaj tytuł, który właśnie czytasz po angielsku, i zacznij zbierać słowa.", btn: "dodaj książkę" }, nowords: { t: "pusta strona czeka", d: "podyktuj na dole pierwsze słowo. dostaniesz tłumaczenie i zdanie, z którego pochodzi.", btn: null }, nofind: { t: "nic nie znaleziono", d: "żadne zapisane słowo nie pasuje do wyszukiwania.", btn: null } };
+    const map = { nobook: { t: "zacznij od książki", d: "każda książka to osobny wątek. dodaj tytuł, który właśnie czytasz, i zacznij zbierać słowa.", btn: "dodaj książkę" }, nowords: { t: "pusta strona czeka", d: "podyktuj na dole pierwsze słowo. dostaniesz tłumaczenie i zdanie, z którego pochodzi.", btn: null }, nofind: { t: "nic nie znaleziono", d: "żadne zapisane słowo nie pasuje do wyszukiwania.", btn: null } };
     const m = map[kind];
     return (React.createElement("div", { style: { maxWidth: 460, margin: "10% auto 0", textAlign: "center", padding: 24 } },
         React.createElement("div", { style: { fontSize: 28, fontWeight: 900, letterSpacing: "-.03em", color: C.ink, marginBottom: 10 } }, m.t),
