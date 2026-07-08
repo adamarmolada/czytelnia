@@ -94,6 +94,21 @@ const LEX_CSS = `
 .lex-cap-input{width:100px;border:1px solid rgba(120,120,140,.34);background:linear-gradient(135deg,rgba(255,255,255,.82),rgba(236,240,228,.8));color:#0B0B0A;font-family:inherit;font-size:12.5px;font-weight:600;padding:5px 12px;border-radius:999px;outline:none;box-shadow:0 2px 8px rgba(18,26,6,.12);transition:border-color .15s ease,box-shadow .15s ease,width .18s ease;}
 .lex-cap-input::placeholder{color:#56604A;opacity:.7;}
 .lex-cap-input:focus{border-color:#8ACE00;box-shadow:0 0 0 3px rgba(138,206,0,.28);width:138px;}
+.lex-seg{display:flex;gap:4px;margin-top:12px;padding:3px;border-radius:12px;background:linear-gradient(135deg,rgba(255,214,238,.55),rgba(210,236,234,.5) 45%,rgba(220,214,246,.55));box-shadow:inset 0 1px 3px rgba(18,26,6,.12),0 1px 0 rgba(255,255,255,.5);}
+.lex-seg button{flex:1;border:none;cursor:pointer;border-radius:9px;padding:7px 0;font-size:12.5px;font-weight:800;letter-spacing:.08em;background:transparent;color:#33420C;transition:color .18s ease,box-shadow .18s ease,background .18s ease;}
+.lex-seg button.on{color:#0B0B0A;background:linear-gradient(135deg,#F5B8E6,#B0E456 55%,#8FD9E8);box-shadow:0 2px 10px rgba(176,228,86,.5),inset 0 0 0 1px rgba(255,255,255,.45);}
+.lex-holo-btn{position:relative;border:none;color:#0B0B0A;font-weight:800;border-radius:12px;background:linear-gradient(120deg,#F5B8E6,#C6EC9E 38%,#8FD9E8 68%,#D6C6F8);background-size:220% 220%;box-shadow:0 4px 16px rgba(176,228,86,.4),inset 0 0 0 1px rgba(255,255,255,.4);animation:lexHolo 6s ease infinite;transition:transform .08s ease,box-shadow .15s ease;}
+.lex-holo-btn:hover{box-shadow:0 7px 22px rgba(143,217,232,.5),inset 0 0 0 1px rgba(255,255,255,.5);}
+.lex-holo-btn:active{transform:translateY(1px);}
+@keyframes lexHolo{0%{background-position:0% 50%;}50%{background-position:100% 50%;}100%{background-position:0% 50%;}}
+.lex-card{position:relative;}
+.lex-card::before{content:"";position:absolute;inset:-16px;border-radius:32px;background:radial-gradient(circle at 28% 18%,rgba(245,184,230,.55),transparent 60%),radial-gradient(circle at 74% 82%,rgba(143,217,232,.55),transparent 60%),radial-gradient(circle at 52% 50%,rgba(176,228,86,.4),transparent 66%);filter:blur(16px);z-index:0;animation:lexGlow 5s ease-in-out infinite;pointer-events:none;}
+@keyframes lexGlow{0%,100%{opacity:.65;transform:scale(1);}50%{opacity:1;transform:scale(1.05);}}
+.lex-card .lex-card-inner{z-index:1;}
+.lex-card .lex-face{box-shadow:0 14px 40px rgba(11,11,10,.16),inset 0 0 0 1.5px rgba(176,228,86,.5),0 0 30px rgba(143,217,232,.32);}
+.lex-card .lex-face.front{background:linear-gradient(160deg,#FFFFFF 0%,#FBFEF3 58%,#F3FBFF 100%);}
+.lex-card .lex-face.back{background:linear-gradient(160deg,#FBFDF4 0%,#F6FCFF 100%);}
+@media (prefers-reduced-motion: reduce){.lex-holo-btn,.lex-card::before{animation:none;}}
 `;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const FIREBASE_CONFIG = {
@@ -134,7 +149,7 @@ function saveCovers(a) { try {
 }
 catch { } }
 function cambridgeUrl(w) { return "https://dictionary.cambridge.org/dictionary/english/" + encodeURIComponent(String(w || "").trim().toLowerCase().replace(/\s+/g, "-")); }
-function normEntry(e) { return { id: e.id || uid(), word: e.word || "", queried: e.queried || e.word || "", ipa: e.ipa || "", pos: e.pos || "", pl: e.pl || "", alts: Array.isArray(e.alts) ? e.alts : [], level: e.level || "", note: e.note || "", definition: e.definition || "", lemma: e.lemma || "", lemmaKind: e.lemmaKind || "", sentence: e.sentence || "", sentencePl: e.sentencePl || "", exampleAlts: Array.isArray(e.exampleAlts) ? e.exampleAlts : [], audio: e.audio || "", fromBook: !!e.fromBook, phrase: !!e.phrase, source: e.source || "", lang: e.lang || "", article: e.article || "", plural: e.plural || "", createdAt: e.createdAt || Date.now() }; }
+function normEntry(e) { return { id: e.id || uid(), word: e.word || "", queried: e.queried || e.word || "", ipa: e.ipa || "", pos: e.pos || "", pl: e.pl || "", alts: Array.isArray(e.alts) ? e.alts : [], level: e.level || "", note: e.note || "", definition: e.definition || "", lemma: e.lemma || "", lemmaKind: e.lemmaKind || "", sentence: e.sentence || "", sentencePl: e.sentencePl || "", exampleAlts: Array.isArray(e.exampleAlts) ? e.exampleAlts : [], audio: e.audio || "", fromBook: !!e.fromBook, phrase: !!e.phrase, source: e.source || "", lang: e.lang || "", article: e.article || "", plural: e.plural || "", nlEnriched: !!e.nlEnriched, createdAt: e.createdAt || Date.now() }; }
 function migrate(lib) {
     if (!lib || typeof lib !== "object")
         lib = {};
@@ -630,7 +645,7 @@ async function lookupWord({ word, sentence, lang }) {
     else if (_lang === "nl" && dict && dict.posList && dict.posList.length) pos = dict.posList.map(function (k) { return POS_PL[k] || k; }).join(" \u00B7 ");
     else pos = dict.pos ? (POS_PL[dict.pos] || dict.pos) : "";
     let _level = info.level || ""; if (_lang === "nl" && !_level && dict && ((dict.defs && dict.defs.length) || dict.ipa || dict.article)) _level = "C2";
-    return { id: uid(), word: clean, queried: clean, ipa: dict.ipa || "", pos: pos, pl: pl, alts: alts, level: _level, note: "", lemma: dict.lemma || "", lemmaKind: dict.lemmaKind || "", sentence: src, sentencePl, exampleAlts: exampleAlts, audio: dict.audio || "", fromBook: !!hasSentence, createdAt: Date.now(), phrase: isPhrase, lang: _lang, article: (dict && dict.article) || "", plural: (dict && dict.plural) || "" };
+    return { id: uid(), word: clean, queried: clean, ipa: dict.ipa || "", pos: pos, pl: pl, alts: alts, level: _level, note: "", lemma: dict.lemma || "", lemmaKind: dict.lemmaKind || "", sentence: src, sentencePl, exampleAlts: exampleAlts, audio: dict.audio || "", fromBook: !!hasSentence, createdAt: Date.now(), phrase: isPhrase, lang: _lang, article: (dict && dict.article) || "", plural: (dict && dict.plural) || "", nlEnriched: (_lang === "nl") };
 }
 /* ===== Nederlands (NL) ===== */
 const NL_POS_MAP = { "Noun": "noun", "Proper noun": "noun", "Verb": "verb", "Adjective": "adjective", "Adverb": "adverb", "Pronoun": "pronoun", "Preposition": "preposition", "Postposition": "preposition", "Conjunction": "conjunction", "Interjection": "interjection", "Numeral": "numeral", "Article": "article", "Determiner": "determiner", "Participle": "adjective" };
@@ -981,28 +996,22 @@ function speakBrowser(word, lang) {
         return false;
     }
 }
-function googleTtsUrl(text, lang) { const t = String(text || "").trim().slice(0, 180); if (!t) return ""; return "https://translate.googleapis.com/translate_tts?ie=UTF-8&client=gtx&tl=" + (lang === "nl" ? "nl" : "en") + "&q=" + encodeURIComponent(t) + "&total=1&idx=0&textlen=" + t.length; }
 function playPronunciation(entry, setSt) {
     setSt && setSt("playing");
     const done = () => setSt && setSt("idle");
-    const srcs = [];
-    if (entry.audio) srcs.push(entry.audio);
-    const g = googleTtsUrl(entry.word, entry.lang);
-    if (g) srcs.push(g);
-    let i = 0;
-    const tryNext = () => {
-        if (i >= srcs.length) { speakBrowser(entry.word, entry.lang); setTimeout(done, 1100); return; }
-        const url = srcs[i++];
+    const speak = () => { speakBrowser(entry.word, entry.lang); setTimeout(done, 1100); };
+    if (entry.audio) {
         try {
-            const a = new Audio(url);
+            const a = new Audio(entry.audio);
             a.onended = done;
-            a.onerror = () => tryNext();
+            a.onerror = speak;
             const p = a.play();
-            if (p && p.catch) p.catch(() => tryNext());
+            if (p && p.catch) p.catch(speak);
+            return;
         }
-        catch (e) { tryNext(); }
-    };
-    tryNext();
+        catch (e) { }
+    }
+    speak();
 }
 function levelColor(l) { const c = { A1: "#3E7D00", A2: "#3E7D00", B1: "#B8791B", B2: "#B8791B", C1: "#7B2D26", C2: "#7B2D26" }; return c[l] || "#56604A"; }
 function nt2Level(l) { return l === "A1" || l === "A2" || l === "B1" || l === "B2"; }
@@ -1040,7 +1049,7 @@ function SpeakerBtn({ entry, size }) {
             React.createElement("path", { d: "M19.5 6a8 8 0 0 1 0 12" }))));
 }
 function shortKind(k){ const m = { "forma czasu przeszłego": "cz. przeszły", "imiesłów bierny": "im. bierny", "imiesłów czynny": "im. czynny", "liczba mnoga": "l. mnoga" }; return m[k] || k || "forma"; }
-function Entry({ e, onDelete, onEdit, onPickAlt, onPickExample, onWord }) {
+function Entry({ e, onDelete, onEdit, onPickAlt, onPickExample, onWord, onConvertSingular }) {
     const [showAlts, setShowAlts] = useState(false);
     const hasAlts = e.exampleAlts && e.exampleAlts.length > 0;
     return (React.createElement("article", { className: "lex-entry", style: { padding: "13px 2px", borderBottom: `1px solid ${C.line}` } },
@@ -1058,7 +1067,7 @@ function Entry({ e, onDelete, onEdit, onPickAlt, onPickExample, onWord }) {
             e.plural && React.createElement("span", { style: { fontSize: 12.5, color: C.inkSoft } }, "l.mn: " + e.plural)),
         e.lemma && React.createElement("div", { style: { marginTop: 4, fontSize: 12.5, color: C.inkSoft } },
             React.createElement("span", { style: { color: C.inkSoft, fontWeight: 400 } }, shortKind(e.lemmaKind) + " od "),
-            React.createElement("span", { onClick: () => onWord && onWord(e.lemma, null), title: "poka\u017C definicj\u0119 (bez reklam)", style: { color: C.ink, fontWeight: 400, textDecoration: "none", borderBottom: `1.5px solid ${C.lime}`, cursor: "pointer" } }, e.lemma)),
+            React.createElement("span", { onClick: () => { if (e.lang === "nl" && e.lemmaKind === "liczba mnoga" && onConvertSingular) onConvertSingular(e); else onWord && onWord(e.lemma, null); }, title: e.lang === "nl" && e.lemmaKind === "liczba mnoga" ? "kliknij, aby zamieni\u0107 wpis na liczb\u0119 pojedyncz\u0105" : "poka\u017C definicj\u0119 (bez reklam)", style: { color: C.ink, fontWeight: 400, textDecoration: "none", borderBottom: `1.5px solid ${C.lime}`, cursor: "pointer" } }, e.lemma)),
         React.createElement("div", { style: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 7, marginTop: 5 } },
             React.createElement("span", { style: { fontSize: 17, fontWeight: 400, color: C.limeDeep } }, e.pl),
             e.alts && e.alts.length > 0 && e.alts.map((a, i) => (React.createElement("button", { key: i, onClick: () => onPickAlt && onPickAlt(e.id, a), className: "lex-primary", title: "ustaw jako g\u0142\u00F3wne t\u0142umaczenie", style: { border: `1px solid ${C.line}`, background: "#fff", color: C.olive, fontWeight: 400, fontSize: 12, padding: "2px 8px", borderRadius: 14, cursor: "pointer" } }, a)))),
@@ -1414,10 +1423,14 @@ function BookModal({ onClose, onSave, initial }) {
         cropSrc && React.createElement(Cropper, { src: cropSrc, onCancel: () => setCropSrc(""), onDone: (u) => { addCustomCover(u); setCropSrc(""); } })));
 }
 function Flashcards({ book, onClose }) {
-    const cards = book.entries || [];
+    const baseCards = book.entries || [];
+    const [nt2Only, setNt2Only] = useState(false);
+    const hasNt2 = baseCards.some(c => c && c.lang === "nl" && nt2Level(c.level));
+    const cards = nt2Only ? baseCards.filter(c => c && c.lang === "nl" && nt2Level(c.level)) : baseCards;
     const [order, setOrder] = useState(() => cards.map((_, i) => i));
     const [pos, setPos] = useState(0);
     const [flipped, setFlipped] = useState(false);
+    useEffect(() => { setOrder(cards.map((_, i) => i)); setPos(0); setFlipped(false); }, [nt2Only, baseCards.length]);
     const go = (d) => { setFlipped(false); setPos(p => { let n = p + d; if (n < 0)
         n = order.length - 1; if (n >= order.length)
         n = 0; return n; }); };
@@ -1439,6 +1452,7 @@ function Flashcards({ book, onClose }) {
                     pos + 1,
                     " / ",
                     order.length)),
+            hasNt2 && React.createElement("button", { onClick: () => setNt2Only(v => !v), className: "lex-cap" + (nt2Only ? " on" : ""), title: "poka\u017C tylko s\u0142ownictwo w zakresie NT2" }, "NT2"),
             cards.length > 1 && React.createElement("button", { onClick: shuffle, className: "lex-primary", style: { border: "none", background: C.paperDeep, color: C.ink, fontWeight: 800, fontSize: 13, padding: "8px 12px", borderRadius: 10, cursor: "pointer" } }, "tasuj")),
         !cards.length ? (React.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center", color: C.inkSoft, fontWeight: 600 } }, "brak s\u0142\u00F3w w tej ksi\u0105\u017Cce \u2014 dodaj kilka, a wr\u00F3c\u0105 tu jako fiszki.")) : (React.createElement(React.Fragment, null,
             React.createElement("div", { style: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "18px" } },
@@ -1799,6 +1813,46 @@ function App() {
     const doDelete = (book, mode) => { const remaining = books.filter(b => b.id !== book.id); const nextPool = mode === "pool" ? poolRef.current.concat((book.entries || []).map(e => ({ ...e, source: book.title }))) : poolRef.current; commit(remaining, nextPool); if (activeId === book.id)
         setActiveId(remaining[0] ? remaining[0].id : null); setDelBook(null); };
     const updateEntry = (eid, patch) => { setAndPersist(prev => prev.map(b => b.id === activeId ? { ...b, touchedAt: Date.now(), entries: b.entries.map(e => e.id === eid ? { ...e, ...patch } : e) } : b)); setEntryEdit(null); };
+    const patchEntryInBook = (bookId, eid, patch) => setAndPersist(prev => prev.map(b => b.id === bookId ? { ...b, entries: b.entries.map(e => e.id === eid ? { ...e, ...patch } : e) } : b));
+    const convertToSingular = async (entry) => {
+        if (!entry || !entry.lemma) return;
+        const bid = activeBook ? activeBook.id : null;
+        if (!bid) return;
+        if (!window.confirm("Zamieni\u0107 ten wpis na liczb\u0119 pojedyncz\u0105 \u201E" + entry.lemma + "\u201D?")) { setWordSheet({ word: entry.lemma, entry: null }); return; }
+        try {
+            const fresh = await lookupWord({ word: entry.lemma, sentence: entry.sentence || "", lang: "nl" });
+            patchEntryInBook(bid, entry.id, { word: fresh.word, queried: entry.queried || fresh.word, ipa: fresh.ipa, pos: fresh.pos, pl: fresh.pl, alts: fresh.alts, level: fresh.level, definition: fresh.definition || "", lemma: fresh.lemma || "", lemmaKind: fresh.lemmaKind || "", audio: fresh.audio || "", article: fresh.article || "", plural: fresh.plural || "", exampleAlts: fresh.exampleAlts || [], nlEnriched: true });
+        }
+        catch (e) { }
+    };
+    const backfillRef = useRef(false);
+    useEffect(() => {
+        if (!loaded || backfillRef.current || !books || !books.length) return;
+        backfillRef.current = true;
+        setAndPersist(prev => prev.map(b => ((b.lang || "en") === "nl") ? { ...b, entries: (b.entries || []).map(e => (!e.level && !e.phrase && e.word && NL_FREQ[String(e.word).toLowerCase()]) ? { ...e, level: NL_FREQ[String(e.word).toLowerCase()] } : e) } : b));
+        const queue = [];
+        for (const b of books) { if ((b.lang || "en") !== "nl") continue; for (const e of (b.entries || [])) { if (!e.nlEnriched && !e.phrase && e.word) queue.push({ bookId: b.id, eid: e.id, word: e.word }); } }
+        let idx = 0;
+        const step = async () => {
+            if (idx >= queue.length) return;
+            const it = queue[idx++];
+            try {
+                const d = await fetchDictNL(it.word);
+                const patch = { nlEnriched: true };
+                if (d.ipa) patch.ipa = d.ipa;
+                if (d.audio) patch.audio = d.audio;
+                if (d.article) patch.article = d.article;
+                if (d.plural) patch.plural = d.plural;
+                if (d.lemma) { patch.lemma = d.lemma; patch.lemmaKind = d.lemmaKind; }
+                if (d.posList && d.posList.length) patch.pos = d.posList.map(function (k) { return POS_PL[k] || k; }).join(" \u00B7 ");
+                const w = String(it.word).toLowerCase(); if (NL_FREQ[w]) patch.level = NL_FREQ[w];
+                patchEntryInBook(it.bookId, it.eid, patch);
+            }
+            catch (e) { }
+            setTimeout(step, 850);
+        };
+        if (queue.length) setTimeout(step, 1500);
+    }, [loaded, books]);
     const lastTapRef = useRef({ id: null, t: 0 });
     const tapTimerRef = useRef(null);
     const cellClick = (id) => {
@@ -1900,7 +1954,7 @@ function App() {
                 React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9 } },
                     React.createElement("div", { style: { fontSize: 30, fontWeight: 900, letterSpacing: "-.04em", lineHeight: 1 } }, "czytelnia"),
                     React.createElement("span", { className: "lex-spark" + (syncBusy ? " sync" : ""), title: syncTitle, style: { fontSize: 19, lineHeight: 1, opacity: syncOff ? 0.4 : 1 } }, syncGlyph)),
-                React.createElement("div", { style: { display: "flex", gap: 4, marginTop: 12, background: "rgba(11,11,10,.06)", borderRadius: 10, padding: 3 } }, ["en", "nl"].map(L => React.createElement("button", { key: L, onClick: () => setLang(L), style: { flex: 1, border: "none", cursor: "pointer", borderRadius: 8, padding: "6px 0", fontSize: 12.5, fontWeight: 800, letterSpacing: ".08em", background: lang === L ? C.ink : "transparent", color: lang === L ? "#fff" : C.shelfMute } }, L === "en" ? "ENG" : "NL"))),
+                React.createElement("div", { className: "lex-seg" }, ["en", "nl"].map(L => React.createElement("button", { key: L, onClick: () => setLang(L), className: lang === L ? "on" : "" }, L === "en" ? "ENG" : "NL"))),
                 React.createElement("button", { onClick: () => { try { const cur = localStorage.getItem("czytelnia:deepl") || ""; const v = prompt("Adres proxy DeepL (URL workera). Puste = wy\u0142\u0105czone:", cur); if (v !== null) { const t = String(v).trim(); if (t) localStorage.setItem("czytelnia:deepl", t); else localStorage.removeItem("czytelnia:deepl"); location.reload(); } } catch (e) { } }, style: { marginTop: 9, border: "none", background: "transparent", color: C.shelfMute, fontSize: 11, fontWeight: 700, cursor: "pointer", padding: 0, textAlign: "left", opacity: .85 } }, deeplUrl() ? "\u2699 DeepL: w\u0142\u0105czony" : "\u2699 DeepL: skonfiguruj")),
             React.createElement("div", { style: { padding: "4px 12px 16px", flex: 1 } },
                 React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 } },
@@ -1918,7 +1972,7 @@ function App() {
                 loaded && langBooks.length === 0 && React.createElement("div", { style: { padding: "14px 4px", fontSize: 13, color: C.shelfMute, lineHeight: 1.5, fontWeight: 600 } }, "brak ksi\u0105\u017Cek. dodaj pierwsz\u0105, \u017Ceby zacz\u0105\u0107 zbiera\u0107 s\u0142owa.")),
             totalCards > 0 && (React.createElement("div", { style: { padding: "14px 16px", borderTop: `1px solid rgba(11,11,10,.1)` } },
                 React.createElement("div", { style: { fontSize: 11, letterSpacing: ".16em", color: C.shelfMute, fontWeight: 800, marginBottom: 8 } }, "FISZKI"),
-                React.createElement("button", { onClick: () => { setShowCardsAll(true); setSidebarOpen(false); }, className: "lex-primary", style: { width: "100%", border: "none", background: C.ink, color: "#fff", fontWeight: 800, fontSize: 13, padding: "11px", borderRadius: 11, cursor: "pointer" } },
+                React.createElement("button", { onClick: () => { setShowCardsAll(true); setSidebarOpen(false); }, className: "lex-primary lex-holo-btn", style: { width: "100%", fontWeight: 800, fontSize: 13, padding: "11px", cursor: "pointer" } },
                     "\uD83C\uDFB4 ze wszystkich ksi\u0105\u017Cek (",
                     totalCards,
                     ")")))),
@@ -1948,7 +2002,7 @@ function App() {
             React.createElement("div", { ref: scrollRef, className: "lex-scroll", style: { flex: 1, minHeight: 0, overflowY: "auto", padding: "8px 24px" } }, !activeBook ? React.createElement(Empty, { kind: "nobook", onAdd: () => setShowAdd(true) })
                 : view.length === 0 ? React.createElement(Empty, { kind: query ? "nofind" : (azLetter ? "nofind" : "nowords") })
                     : (React.createElement("div", { style: { maxWidth: 680, margin: "0 auto" } },
-                        view.map(e => React.createElement(Entry, { key: e.id, e: e, onDelete: deleteEntry, onEdit: setEntryEdit, onPickAlt: pickAlt, onPickExample: pickExample, onWord: (ww, ent) => setWordSheet({ word: ww, entry: ent || null }) })),
+                        view.map(e => React.createElement(Entry, { key: e.id, e: e, onDelete: deleteEntry, onEdit: setEntryEdit, onPickAlt: pickAlt, onPickExample: pickExample, onWord: (ww, ent) => setWordSheet({ word: ww, entry: ent || null }), onConvertSingular: convertToSingular })),
                         busy && React.createElement("div", { style: { padding: "22px 2px", color: C.inkSoft } },
                             React.createElement("span", { style: { fontStyle: "italic", fontSize: 17 } }, "t\u0142umacz\u0119"),
                             React.createElement("span", { className: "lex-dots", style: { marginLeft: 2 } },
