@@ -1322,6 +1322,7 @@ function BookModal({ onClose, onSave, initial }) {
     const [pages, setPages] = useState(initial ? (initial.pages || 0) : 0);
     const [spineColor, setSpineColor] = useState(initial ? (initial.spineColor || "") : "");
     const [spineShade, setSpineShade] = useState(initial ? (initial.spineShade || "") : "");
+    const [bookLang, setBookLang] = useState(initial ? (initial.lang || "en") : "en");
     const [autoSpine, setAutoSpine] = useState("");
     const [savedCovers, setSavedCovers] = useState(() => loadCovers());
     const [loadingCovers, setLoadingCovers] = useState(false);
@@ -1432,7 +1433,7 @@ function BookModal({ onClose, onSave, initial }) {
         return function () { ok = false; };
     }, [cover]);
     const submit = () => { const t = title.trim(); if (!t)
-        return; onSave({ title: t, author: author.trim(), cover: cover || "", pages: Math.max(0, parseInt(pages, 10) || 0), spineColor: spineColor || "", spineShade: spineShade || "" }); };
+        return; onSave({ title: t, author: author.trim(), cover: cover || "", pages: Math.max(0, parseInt(pages, 10) || 0), spineColor: spineColor || "", spineShade: spineShade || "", lang: bookLang }); };
     const addCustomCover = (url) => { setCovers(prev => [{ id: "own" + Date.now(), url }].concat(prev)); setCover(url); setSavedCovers(prev => { if (prev.indexOf(url) >= 0)
         return prev; const next = [url].concat(prev).slice(0, 40); saveCovers(next); return next; }); };
     const removeSavedCover = (url) => { setSavedCovers(prev => { const next = prev.filter(x => x !== url); saveCovers(next); return next; }); if (cover === url)
@@ -1462,6 +1463,7 @@ function BookModal({ onClose, onSave, initial }) {
         React.createElement("div", { className: "lex-modal-bg", onClick: onClose },
             React.createElement("div", { className: "lex-modal", onClick: (e) => e.stopPropagation() },
                 React.createElement("div", { className: "lex-modal-title" }, initial ? "edytuj książkę" : "nowa książka"),
+                initial && React.createElement("div", { className: "lex-seg", style: { marginTop: 0, marginBottom: 12 } }, ["en", "nl"].map(L => React.createElement("button", { key: L, onClick: () => setBookLang(L), className: bookLang === L ? "on" : "" }, L === "en" ? "ENG" : "NL"))),
                 React.createElement("input", { className: "lex-field", autoFocus: true, value: title, onChange: (e) => { setPicked(false); setTitle(e.target.value); }, placeholder: "tytu\u0142 \u2014 zacznij pisa\u0107, podpowiem", style: { fontSize: 16, fontWeight: 700, padding: "12px 13px" } }),
                 searching && React.createElement("div", { style: { fontSize: 12, color: C.inkSoft, marginTop: 6, fontWeight: 600 } }, "szukam\u2026"),
                 sugs.length > 0 && (React.createElement("div", { className: "lex-sug" }, sugs.map((s, i) => (React.createElement("div", { key: i, className: "lex-sug-item", onClick: () => pick(s) },
@@ -1738,6 +1740,7 @@ function App() {
     const [books, setBooks] = useState([]);
     const [activeId, setActiveId] = useState(null);
     const [loaded, setLoaded] = useState(false);
+    const [cloudReady, setCloudReady] = useState(false);
     const [syncState, setSyncState] = useState(SYNC_ON ? "łączę…" : "tylko to urządzenie");
     const [word, setWord] = useState("");
     const [sentence, setSentence] = useState("");
@@ -1765,6 +1768,7 @@ function App() {
     const wordRef = useRef(null);
     const sentenceRef = useRef(null);
     const stampRef = useRef(0);
+    const firstSnapRef = useRef(true);
     const pushT = useRef(null);
     const booksRef = useRef([]);
     const poolRef = useRef([]);
@@ -1795,16 +1799,18 @@ function App() {
         catch (e) { }
     } }, [activeId]);
     useEffect(() => {
-        if (!SYNC_ON)
-            return;
+        if (!SYNC_ON) { setCloudReady(true); return; }
         const doc = cloudDoc();
         if (!doc) {
             setSyncState("błąd synchronizacji");
+            setCloudReady(true);
             return;
         }
         const unsub = doc.onSnapshot((snap) => {
             const data = snap.data();
-            if (data && Array.isArray(data.books) && (data.updatedAt || 0) > stampRef.current) {
+            const first = firstSnapRef.current;
+            firstSnapRef.current = false;
+            if (data && Array.isArray(data.books) && (first || (data.updatedAt || 0) > stampRef.current)) {
                 const m = migrate(data);
                 stampRef.current = data.updatedAt || 0;
                 setBooks(m.books);
@@ -1820,7 +1826,8 @@ function App() {
                     doc.set({ books: lib.books, pool: lib.pool, updatedAt: Date.now() }).catch(() => { });
             }
             setSyncState("zsynchronizowano");
-        }, (err) => { console.error(err); setSyncState("błąd synchronizacji"); });
+            setCloudReady(true);
+        }, (err) => { console.error(err); setSyncState("błąd synchronizacji"); setCloudReady(true); });
         return () => unsub();
     }, []);
     const commit = useCallback((nextBooks, nextPool) => {
@@ -1911,7 +1918,7 @@ function App() {
     };
     const backfillRef = useRef(false);
     useEffect(() => {
-        if (!loaded || backfillRef.current || !books || !books.length) return;
+        if (!loaded || !cloudReady || backfillRef.current || !books || !books.length) return;
         backfillRef.current = true;
         setAndPersist(prev => prev.map(b => ((b.lang || "en") === "nl") ? { ...b, entries: (b.entries || []).map(e => (!e.level && !e.phrase && e.word && NL_FREQ[String(e.word).toLowerCase()]) ? { ...e, level: NL_FREQ[String(e.word).toLowerCase()] } : e) } : b));
         const queue = [];
@@ -1936,7 +1943,7 @@ function App() {
             setTimeout(step, 850);
         };
         if (queue.length) setTimeout(step, 1500);
-    }, [loaded, books]);
+    }, [loaded, cloudReady, books]);
     const lastTapRef = useRef({ id: null, t: 0 });
     const tapTimerRef = useRef(null);
     const cellClick = (id) => {
@@ -1959,7 +1966,7 @@ function App() {
             clearTimeout(tapTimerRef.current);
         tapTimerRef.current = setTimeout(() => { setSidebarOpen(false); tapTimerRef.current = null; }, 360);
     };
-    const updateBook = (id, data) => { setAndPersist(prev => prev.map(b => b.id === id ? { ...b, title: data.title, author: data.author || "", cover: data.cover || "", pages: data.pages || 0, spineColor: data.spineColor || "", spineShade: data.spineShade || "", touchedAt: Date.now() } : b)); };
+    const updateBook = (id, data) => { setAndPersist(prev => prev.map(b => b.id === id ? { ...b, title: data.title, author: data.author || "", cover: data.cover || "", pages: data.pages || 0, spineColor: data.spineColor || "", spineShade: data.spineShade || "", lang: data.lang || b.lang || "en", touchedAt: Date.now() } : b)); };
     const pickAlt = (eid, newPl) => { setAndPersist(prev => prev.map(b => b.id === activeId ? { ...b, touchedAt: Date.now(), entries: b.entries.map(e => { if (e.id !== eid)
             return e; const cand = [e.pl].concat(e.alts || []).filter(a => a && a.toLowerCase() !== newPl.toLowerCase()); const uniq = []; const seen = {}; for (const o of cand) {
             const k = o.toLowerCase();
